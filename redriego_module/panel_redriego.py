@@ -4,7 +4,7 @@ from qgis.PyQt.QtWidgets import (
     QCheckBox, QGridLayout, QSizePolicy, QDialog, QToolTip, QDockWidget, QSlider, QHBoxLayout, QToolButton, QSpacerItem,
     QGroupBox, QTextEdit  # Añade estas dos clases
 )
-from qgis.PyQt.QtGui import QColor, QPainter, QFontMetrics, QRegExpValidator, QIntValidator
+from qgis.PyQt.QtGui import QColor, QPainter, QFontMetrics, QRegExpValidator, QIntValidator, QCursor
 from qgis.PyQt.QtCore import (
     Qt, pyqtSignal, QPoint, QRect, QRegExp
 )
@@ -30,9 +30,12 @@ from qgis.core import (
     QgsCoordinateTransform,
     QgsSnappingConfig,
     Qgis,
-    QgsFeatureRequest  # Añade esta clase
+    QgsFeatureRequest,  # Añade esta clase
+    QgsPointLocator,
+    QgsTolerance
 )
 
+from qgis.PyQt.QtGui import QIcon
 from qgis.utils import iface
 from PyQt5.QtCore import QVariant
 import os
@@ -48,11 +51,11 @@ class FloatingLengthInput(QWidget):
         super().__init__(canvas)  # Pasamos el canvas como padre para asegurar visibilidad correcta
         
         # Configuración básica del widget
-        self.setFixedSize(120, 30)
+        self.setFixedSize(80, 30)
         
         # Crear campo de texto
         self.edit = QLineEdit(self)
-        self.edit.setGeometry(0, 0, 120, 30)
+        self.edit.setGeometry(0, 0, 80, 30)
         self.edit.setAlignment(Qt.AlignCenter)
         self.edit.setValidator(QRegExpValidator(QRegExp("\\d+(\\.\\d+)?")))
         self.edit.setText(str(initial_value))
@@ -61,13 +64,13 @@ class FloatingLengthInput(QWidget):
         # Estilo para hacer el campo más limpio
         self.edit.setStyleSheet("""
             QLineEdit {
-                background-color: rgba(255, 255, 255, 220);
+                background-color: rgba(255, 255, 255, 150);
                 border: 1px solid rgba(100, 100, 100, 150);
                 border-radius: 5px;
                 padding: 2px;
                 font-weight: bold;
                 color: black;
-                font-size: 12pt;
+                font-size: 9pt;
             }
         """)
         
@@ -79,7 +82,7 @@ class FloatingLengthInput(QWidget):
     def update_value(self, value):
         """Actualiza el valor mostrado sin emitir señal"""
         if not self.edit.hasFocus():
-            self.edit.setText(f"{value:.2f}")
+            self.edit.setText(f"{value:.1f}")
     
     def on_value_entered(self):
         """Emite la señal cuando se introduce un nuevo valor"""
@@ -565,6 +568,95 @@ class LineDrawingTool(QgsMapToolEmitPoint):
         
         # Para cualquier otro evento, dejar que el sistema lo maneje
         event.ignore()
+
+class LineSelectionTool(QgsMapToolEmitPoint):
+    """Herramienta para seleccionar una línea como destino para extender otras líneas"""
+    lineSelected = pyqtSignal(QgsFeature)
+    
+    def __init__(self, canvas, layer):
+        super().__init__(canvas)
+        self.canvas = canvas
+        self.layer = layer
+        self.cursor = QCursor(Qt.CrossCursor)
+        
+        # Configurar snapping
+        self.snapping_utils = QgsMapCanvasSnappingUtils(canvas)
+        self.snapping_utils.setConfig(QgsProject.instance().snappingConfig())
+        self.snap_indicator = QgsSnapIndicator(canvas)
+        
+        # Configurar marcador temporal para el clic
+        self.vertex_marker = QgsVertexMarker(canvas)
+        self.vertex_marker.setColor(QColor(255, 0, 0))
+        self.vertex_marker.setPenWidth(2)
+        self.vertex_marker.setIconSize(5)
+        self.vertex_marker.setIconType(QgsVertexMarker.ICON_CIRCLE)
+        self.vertex_marker.hide()
+        
+        # Configurar banda de goma para destacar la línea
+        self.rubber_band = QgsRubberBand(canvas, QgsWkbTypes.LineGeometry)
+        self.rubber_band.setColor(QColor(0, 255, 0, 150))
+        self.rubber_band.setWidth(3)
+        
+    def activate(self):
+        """Se llama cuando se activa la herramienta"""
+        super().activate()
+        self.canvas.setCursor(self.cursor)
+        
+    def deactivate(self):
+        """Se llama cuando se desactiva la herramienta"""
+        self.snap_indicator.setVisible(False)
+        self.vertex_marker.hide()
+        self.rubber_band.reset(QgsWkbTypes.LineGeometry)
+        super().deactivate()
+        
+    def canvasMoveEvent(self, event):
+        """Maneja el movimiento del ratón en el canvas"""
+        # Intentar hacer snap a una línea
+        snapping_result = self.snapping_utils.snapToMap(event.pos())
+        
+        if snapping_result.isValid() and snapping_result.layer() and snapping_result.layer().id() == self.layer.id():
+            # Mostrar indicador de snap
+            self.snap_indicator.setVisible(True)
+            self.snap_indicator.setMatch(snapping_result)
+            
+            # Destacar la línea a la que se hace snap
+            feature_id = snapping_result.featureId()
+            request = QgsFeatureRequest().setFilterFid(feature_id)
+            features = list(self.layer.getFeatures(request))
+            
+            if features:
+                # Mostrar la línea en el rubber band
+                self.rubber_band.reset(QgsWkbTypes.LineGeometry)
+                self.rubber_band.setToGeometry(features[0].geometry(), None)
+        else:
+            # Ocultar indicadores si no hay snap válido
+            self.snap_indicator.setVisible(False)
+            self.rubber_band.reset(QgsWkbTypes.LineGeometry)
+    
+    def canvasPressEvent(self, event):
+        """Maneja el clic en el canvas"""
+        if event.button() == Qt.LeftButton:
+            # Intentar hacer snap a una línea
+            snapping_result = self.snapping_utils.snapToMap(event.pos())
+            
+            if snapping_result.isValid() and snapping_result.layer() and snapping_result.layer().id() == self.layer.id():
+                # Obtener el feature seleccionado
+                feature_id = snapping_result.featureId()
+                request = QgsFeatureRequest().setFilterFid(feature_id)
+                features = list(self.layer.getFeatures(request))
+                
+                if features:
+                    # Emitir señal con el feature seleccionado
+                    self.lineSelected.emit(features[0])
+                    
+                    # Mostrar marcador en el punto de clic
+                    self.vertex_marker.setCenter(snapping_result.point())
+                    self.vertex_marker.show()
+            else:
+                # Si no hay snap, limpiar selección
+                self.vertex_marker.hide()
+                self.rubber_band.reset(QgsWkbTypes.LineGeometry)
+
 class PanelRedRiego(QDockWidget):
     def __init__(self, iface):
         super().__init__("Red de Riego")  # Título del panel
@@ -639,13 +731,31 @@ class PanelRedRiego(QDockWidget):
         
         # Añadir botón de identificar objetos espaciales
         self.btn_identificar = QToolButton()
-        self.btn_identificar.setIcon(iface.actionIdentify().icon())
+        self.btn_identificar.setIcon(self.cargar_icono('identificar.svg'))
         self.btn_identificar.setToolTip("Identificar objetos espaciales")
         self.btn_identificar.clicked.connect(self.activar_identificar)
 
+        # Añadir botón para extender líneas
+        self.btn_extender = QToolButton()
+        self.btn_extender.setIcon(self.cargar_icono('extender.svg'))  # Necesitarás crear este icono
+        self.btn_extender.setToolTip("Extender líneas seleccionadas hasta otra línea")
+        self.btn_extender.clicked.connect(self.extender_lineas)
+
+        # Añadir botón para invertir líneas
+        self.btn_invertir = QToolButton()
+        self.btn_invertir.setIcon(self.cargar_icono('invertir.svg'))
+        self.btn_invertir.setToolTip("Invertir líneas seleccionadas")
+        self.btn_invertir.clicked.connect(self.invertir_lineas)
+
+        # Añadir botón para redimensionar líneas
+        self.btn_redimensionar = QToolButton()
+        self.btn_redimensionar.setIcon(self.cargar_icono('redimensionar.svg'))
+        self.btn_redimensionar.setToolTip("Redimensionar línea")
+        self.btn_redimensionar.clicked.connect(self.redimensionar_linea)
+
         # Añadir botón "Dibujar red" con el icono de añadir línea
         self.btn_dibujar_red = QToolButton()
-        self.btn_dibujar_red.setIcon(iface.actionAddFeature().icon())
+        self.btn_dibujar_red.setIcon(self.cargar_icono('dibujar.svg'))
         self.btn_dibujar_red.setToolTip("Dibujar red")
         self.btn_dibujar_red.clicked.connect(self.dibujar_red)
         
@@ -653,6 +763,9 @@ class PanelRedRiego(QDockWidget):
         toolbar_layout.addLayout(selection_layout)  # Botones de selección a la izquierda
         toolbar_layout.addStretch()                 # Espacio en medio
         toolbar_layout.addWidget(self.btn_identificar)  # Botón de identificar
+        toolbar_layout.addWidget(self.btn_extender)  # Botón de extender líneas
+        toolbar_layout.addWidget(self.btn_invertir)  # Botón de invertir líneas
+        toolbar_layout.addWidget(self.btn_redimensionar)  # Botón de redimensionar línea
         toolbar_layout.addWidget(self.btn_dibujar_red)  # Botón de dibujar red a la derecha
         
         # Añadir la barra de herramientas al layout principal (row 0)
@@ -683,7 +796,7 @@ class PanelRedRiego(QDockWidget):
         layout.addWidget(QLabel("Material:"), row, 0)
         row += 1
         self.material_combo = QComboBox()
-        self.material_combo.addItems(["PE", "PVC"])
+        self.material_combo.addItems(["PE", "PVC", "HDPE"])
         self.material_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         layout.addWidget(self.material_combo, row, 0)
         row += 1
@@ -701,7 +814,7 @@ class PanelRedRiego(QDockWidget):
         layout.addWidget(QLabel("Tipo de riego:"), row, 0)
         row += 1
         self.tipo_riego_combo = QComboBox()
-        self.tipo_riego_combo.addItems(["Aspersion", "Goteo", "Cintas", "Subterraneo"])
+        self.tipo_riego_combo.addItems(["Aspersion", "Goteo", "Cintas", "Subterraneo", "Microaspersion"])
         self.tipo_riego_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         layout.addWidget(self.tipo_riego_combo, row, 0)
         row += 1
@@ -737,10 +850,23 @@ class PanelRedRiego(QDockWidget):
         red_summary_layout.addWidget(QLabel("Resumen de la red:"))
         red_summary_layout.addWidget(self.resumen_texto)
 
+        # Layout para botones de resumen
+        resumen_buttons_layout = QHBoxLayout()
+
         # Botón para actualizar resumen
         self.btn_actualizar_resumen = QPushButton("Actualizar resumen")
         self.btn_actualizar_resumen.clicked.connect(self.actualizar_resumen)
-        red_summary_layout.addWidget(self.btn_actualizar_resumen)
+        resumen_buttons_layout.addWidget(self.btn_actualizar_resumen)
+
+        # Botón para crear tabla resumen
+        self.btn_crear_tabla = QToolButton()
+        self.btn_crear_tabla.setIcon(self.cargar_icono('tabla_resumen.svg'))
+        self.btn_crear_tabla.setToolTip("Crear tabla resumen de longitudes")
+        self.btn_crear_tabla.clicked.connect(self.crear_tabla_resumen)
+        resumen_buttons_layout.addWidget(self.btn_crear_tabla)
+
+        # Añadir layout de botones
+        red_summary_layout.addLayout(resumen_buttons_layout)
 
         self.red_summary_group.setLayout(red_summary_layout)
         layout.addWidget(self.red_summary_group, row, 0)
@@ -1104,3 +1230,499 @@ class PanelRedRiego(QDockWidget):
 
         # Actualizar el resumen de la red cuando se muestra el panel
         self.actualizar_resumen()
+
+    def redimensionar_linea(self):
+        """Activa la herramienta para redimensionar líneas existentes"""
+        layer = self.iface.activeLayer()
+        if not layer or layer.geometryType() != QgsWkbTypes.LineGeometry:
+            self.iface.messageBar().pushWarning(
+                "Red de Riego",
+                "Debe seleccionar primero una capa de líneas."
+            )
+            return
+        
+        if not layer.isEditable():
+            layer.startEditing()
+        
+        # Verificar si hay elementos seleccionados
+        if layer.selectedFeatureCount() == 0:
+            self.iface.messageBar().pushInfo(
+                "Red de Riego",
+                "Primero seleccione una línea usando la herramienta de selección."
+            )
+            return
+        
+        # Obtener la entidad seleccionada
+        selected_features = layer.selectedFeatures()
+        if len(selected_features) > 1:
+            self.iface.messageBar().pushInfo(
+                "Red de Riego",
+                "Por favor, seleccione solo una línea a la vez."
+            )
+            return
+        
+        # Obtener la única entidad seleccionada
+        feature = selected_features[0]
+        geometry = feature.geometry()
+        
+        # Verificar que sea una línea
+        if geometry.type() != QgsWkbTypes.LineGeometry:
+            return
+        
+        # Calcular longitud actual
+        distance_area = QgsDistanceArea()
+        distance_area.setSourceCrs(layer.crs(), QgsProject.instance().transformContext())
+        distance_area.setEllipsoid(QgsProject.instance().ellipsoid())
+        current_length = distance_area.measureLength(geometry)
+        
+        # Crear diálogo para introducir nueva longitud
+        from qgis.PyQt.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QHBoxLayout
+        
+        dialog = QDialog(self.iface.mainWindow())
+        dialog.setWindowTitle("Redimensionar línea")
+        dialog.setFixedWidth(300)
+        
+        layout = QVBoxLayout()
+        
+        # Etiqueta informativa
+        info_label = QLabel(f"Longitud actual: {round(current_length, 2)} m")
+        layout.addWidget(info_label)
+        
+        # Campo para introducir nueva longitud
+        input_layout = QHBoxLayout()
+        input_layout.addWidget(QLabel("Nueva longitud (m):"))
+        length_input = QLineEdit()
+        length_input.setText(str(round(current_length, 2)))
+        length_input.setValidator(QRegExpValidator(QRegExp("\\d+(\\.\\d+)?")))
+        input_layout.addWidget(length_input)
+        layout.addLayout(input_layout)
+        
+        # Botones
+        button_layout = QHBoxLayout()
+        cancel_button = QPushButton("Cancelar")
+        cancel_button.clicked.connect(dialog.reject)
+        apply_button = QPushButton("Aplicar")
+        apply_button.clicked.connect(dialog.accept)
+        button_layout.addWidget(cancel_button)
+        button_layout.addWidget(apply_button)
+        layout.addLayout(button_layout)
+        
+        dialog.setLayout(layout)
+        
+        # Mostrar diálogo
+        if dialog.exec_() == QDialog.Accepted:
+            try:
+                new_length = float(length_input.text())
+                if new_length <= 0:
+                    self.iface.messageBar().pushWarning(
+                        "Red de Riego",
+                        "La longitud debe ser mayor que cero."
+                    )
+                    return
+                    
+                # Calcular factor de escala
+                scale_factor = new_length / current_length if current_length > 0 else 1.0
+                
+                # Obtener vértices
+                line = geometry.asPolyline()
+                
+                # Crear nueva geometría redimensionada
+                new_line = []
+                
+                # Mantener el primer punto fijo y escalar el resto
+                fixed_point = line[0]
+                new_line.append(QgsPointXY(fixed_point))
+                
+                for i in range(1, len(line)):
+                    # Vector desde el punto fijo
+                    dx = line[i].x() - fixed_point.x()
+                    dy = line[i].y() - fixed_point.y()
+                    
+                    # Aplicar factor de escala
+                    new_x = fixed_point.x() + dx * scale_factor
+                    new_y = fixed_point.y() + dy * scale_factor
+                    
+                    new_line.append(QgsPointXY(new_x, new_y))
+                
+                # Crear nueva geometría
+                new_geometry = QgsGeometry.fromPolylineXY(new_line)
+                
+                # Actualizar geometría
+                layer.changeGeometry(feature.id(), new_geometry)
+                
+                # Actualizar atributo de longitud si existe
+                if "L" in feature.fields().names():
+                    field_idx = feature.fieldNameIndex("L")
+                    layer.changeAttributeValue(feature.id(), field_idx, round(new_length, 2))
+                
+                # Forzar actualización visual
+                layer.triggerRepaint()
+                
+                # Informar al usuario
+                self.iface.messageBar().pushInfo(
+                    "Red de Riego",
+                    f"Línea redimensionada con éxito. Nueva longitud: {round(new_length, 2)}m"
+                )
+                
+            except ValueError:
+                self.iface.messageBar().pushWarning(
+                    "Red de Riego",
+                    "Por favor, introduzca una longitud válida."
+                )
+
+    def update_line_geometry(self, geometry, new_length, feature_id):
+        """Actualiza la geometría de una línea existente"""
+        layer = self.iface.activeLayer()
+        if not layer or not layer.isEditable():
+            return
+        
+        # Actualizar geometría
+        layer.changeGeometry(feature_id, geometry)
+        
+        # Actualizar atributo de longitud
+        for field_idx, field in enumerate(layer.fields()):
+            if field.name() == "L":
+                layer.changeAttributeValue(feature_id, field_idx, round(new_length, 2))
+                break
+        
+        # Forzar actualización visual
+        layer.triggerRepaint()
+        
+        # Informar al usuario
+        self.iface.messageBar().pushInfo(
+            "Red de Riego",
+            f"Línea redimensionada con éxito. Nueva longitud: {round(new_length, 2)}m"
+        )
+
+    def invertir_lineas(self):
+        """Invierte la dirección de las líneas seleccionadas"""
+        layer = self.iface.activeLayer()
+        if not layer or layer.geometryType() != QgsWkbTypes.LineGeometry:
+            self.iface.messageBar().pushWarning(
+                "Red de Riego",
+                "Debe seleccionar primero una capa de líneas."
+            )
+            return
+        
+        # Verificar si hay elementos seleccionados
+        if layer.selectedFeatureCount() == 0:
+            self.iface.messageBar().pushInfo(
+                "Red de Riego",
+                "Seleccione una o más líneas para invertir su dirección."
+            )
+            return
+        
+        # Verificar si la capa está en modo edición
+        if not layer.isEditable():
+            layer.startEditing()
+        
+        # Invertir cada línea seleccionada
+        contador = 0
+        for feature in layer.selectedFeatures():
+            geometry = feature.geometry()
+            
+            # Verificar que sea una línea
+            if geometry.type() != QgsWkbTypes.LineGeometry:
+                continue
+            
+            # Obtener vértices y revertir el orden
+            line = geometry.asPolyline()
+            reversed_line = list(reversed(line))
+            
+            # Crear nueva geometría con el orden invertido
+            new_geometry = QgsGeometry.fromPolylineXY(reversed_line)
+            
+            # Actualizar geometría
+            layer.changeGeometry(feature.id(), new_geometry)
+            contador += 1
+        
+        # Forzar actualización visual
+        layer.triggerRepaint()
+        
+        # Informar al usuario
+        if contador > 0:
+            self.iface.messageBar().pushInfo(
+                "Red de Riego",
+                f"Se invirtió la dirección de {contador} línea(s) seleccionada(s)."
+            )
+        else:
+            self.iface.messageBar().pushInfo(
+                "Red de Riego",
+                "No se invirtió ninguna línea."
+            )
+
+    def cargar_icono(self, nombre_archivo):
+        """Carga un icono desde la carpeta de iconos del plugin"""
+        import os
+        plugin_dir = os.path.dirname(os.path.abspath(__file__))
+        icons_dir = os.path.join(plugin_dir, 'icons')
+        icon_path = os.path.join(icons_dir, nombre_archivo)
+        
+        if os.path.exists(icon_path):
+            return QIcon(icon_path)
+        else:
+            # Retornar un icono por defecto o None
+            return QIcon(":/images/themes/default/mActionUnknown.svg")
+
+    def extender_lineas(self):
+        """Extiende las líneas seleccionadas hasta intersectar con otra línea que se selecciona en el canvas"""
+        layer = self.iface.activeLayer()
+        if not layer or layer.geometryType() != QgsWkbTypes.LineGeometry:
+            self.iface.messageBar().pushWarning(
+                "Red de Riego",
+                "Debe seleccionar primero una capa de líneas."
+            )
+            return
+        
+        # Verificar si hay elementos seleccionados
+        if layer.selectedFeatureCount() == 0:
+            self.iface.messageBar().pushInfo(
+                "Red de Riego",
+                "Primero seleccione una o más líneas que desea extender."
+            )
+            return
+        
+        # Verificar si la capa está en modo edición
+        if not layer.isEditable():
+            layer.startEditing()
+        
+        # Guardar las líneas seleccionadas para extender
+        lineas_a_extender = []
+        for feat in layer.selectedFeatures():
+            lineas_a_extender.append(QgsFeature(feat))
+        
+        # Informar al usuario que debe seleccionar la línea destino
+        self.iface.messageBar().pushInfo(
+            "Red de Riego",
+            "Ahora seleccione la línea destino hasta la que extender las líneas."
+        )
+        
+        # Crear y activar la herramienta de selección de línea destino
+        self.line_selection_tool = LineSelectionTool(self.iface.mapCanvas(), layer)
+        self.line_selection_tool.lineSelected.connect(lambda feat: self.procesar_extension_lineas(lineas_a_extender, feat))
+        self.iface.mapCanvas().setMapTool(self.line_selection_tool)
+
+    def procesar_extension_lineas(self, lineas_a_extender, linea_destino_feat):
+        """Procesa la extensión de las líneas seleccionadas hasta la línea destino"""
+        # Desactivar la herramienta de selección de línea
+        self.iface.mapCanvas().unsetMapTool(self.line_selection_tool)
+        del self.line_selection_tool
+        
+        layer = self.iface.activeLayer()
+        if not layer or not layer.isEditable():
+            return
+        
+        # Obtener la geometría de la línea destino
+        linea_destino = linea_destino_feat.geometry()
+        if not linea_destino or linea_destino.type() != QgsWkbTypes.LineGeometry:
+            self.iface.messageBar().pushWarning(
+                "Red de Riego",
+                "La línea destino seleccionada no es válida."
+            )
+            return
+        
+        # Informar al usuario qué línea se ha seleccionado como destino
+        self.iface.messageBar().pushInfo(
+            "Red de Riego",
+            f"Extendiendo líneas hasta la línea con ID: {linea_destino_feat.id()}"
+        )
+        
+        # Procesar cada línea a extender
+        contador = 0
+        for feat in lineas_a_extender:
+            # Saltamos si la línea a extender es la misma que la línea destino
+            if feat.id() == linea_destino_feat.id():
+                continue
+            
+            # Obtener la geometría de la línea a extender
+            geom = feat.geometry()
+            if geom.type() != QgsWkbTypes.LineGeometry:
+                continue
+            
+            # Obtener los puntos de la línea
+            line_points = geom.asPolyline()
+            if len(line_points) < 2:
+                continue
+            
+            # Determinar el punto final (que vamos a extender)
+            start_point = QgsPointXY(line_points[0])
+            end_point = QgsPointXY(line_points[-1])
+            
+            # Calcular el vector de dirección de la línea
+            dx = end_point.x() - start_point.x()
+            dy = end_point.y() - start_point.y()
+            
+            # Normalizar el vector
+            length = (dx**2 + dy**2)**0.5
+            if length > 0:
+                dx /= length
+                dy /= length
+            else:
+                continue  # Línea demasiado corta
+            
+            # Extender la línea en la dirección calculada
+            extension_factor = 10000  # Una distancia muy grande
+            extended_end_x = end_point.x() + dx * extension_factor
+            extended_end_y = end_point.y() + dy * extension_factor
+            extended_end_point = QgsPointXY(extended_end_x, extended_end_y)
+            
+            # Crear una línea temporal extendida
+            extended_line_points = list(line_points)
+            extended_line_points[-1] = extended_end_point
+            extended_geometry = QgsGeometry.fromPolylineXY(extended_line_points)
+            
+            # Calcular la intersección con la línea destino
+            intersection = extended_geometry.intersection(linea_destino)
+            
+            # Si hay intersección y es un punto
+            if not intersection.isEmpty() and intersection.type() == QgsWkbTypes.PointGeometry:
+                # Si hay múltiples intersecciones, tomar el más cercano al punto final original
+                if intersection.isMultipart():
+                    intersection_points = intersection.asMultiPoint()
+                    
+                    # Encontrar el punto más cercano
+                    min_distance = float('inf')
+                    closest_point = None
+                    for point in intersection_points:
+                        distance = ((point.x() - end_point.x())**2 + (point.y() - end_point.y())**2)**0.5
+                        if distance < min_distance:
+                            min_distance = distance
+                            closest_point = point
+                    
+                    if closest_point:
+                        intersection_point = closest_point
+                    else:
+                        continue
+                else:
+                    intersection_point = intersection.asPoint()
+                
+                # Crear la nueva geometría extendida
+                new_line_points = list(line_points)
+                new_line_points[-1] = intersection_point
+                new_geometry = QgsGeometry.fromPolylineXY(new_line_points)
+                
+                # Actualizar la geometría
+                layer.changeGeometry(feat.id(), new_geometry)
+                
+                # Actualizar atributo de longitud si existe
+                if "L" in feat.fields().names():
+                    field_idx = feat.fieldNameIndex("L")
+                    new_length = new_geometry.length()
+                    layer.changeAttributeValue(feat.id(), field_idx, round(new_length, 2))
+                
+                contador += 1
+        
+        # Forzar actualización visual
+        layer.triggerRepaint()
+        
+        # Informar al usuario
+        if contador > 0:
+            self.iface.messageBar().pushInfo(
+                "Red de Riego",
+                f"Se extendieron {contador} línea(s) hasta la línea destino."
+            )
+        else:
+            self.iface.messageBar().pushInfo(
+                "Red de Riego",
+                "No se pudo extender ninguna línea. Verifique que las líneas sean extendibles hasta la línea destino."
+            )
+
+    def crear_tabla_resumen(self):
+        """Crea una tabla resumen de longitudes por tipo y diámetro nominal"""
+        # Buscar la capa "Red de riego"
+        red_layer = None
+        for layer in QgsProject.instance().mapLayers().values():
+            if layer.name() == "Red de riego" and layer.geometryType() == QgsWkbTypes.LineGeometry:
+                red_layer = layer
+                break
+        
+        if not red_layer:
+            self.iface.messageBar().pushWarning(
+                "Red de Riego",
+                "No se encontró la capa 'Red de riego'. Por favor, verifique que existe una capa con este nombre."
+            )
+            return
+        
+        # Obtener o crear el grupo "Tablas"
+        root = QgsProject.instance().layerTreeRoot()
+        tablas_group = root.findGroup("Tablas")
+        
+        if not tablas_group:
+            tablas_group = root.addGroup("Tablas")
+        
+        # Estructura para almacenar los resultados agrupados
+        resultados = {}  # Clave: (Tipo, DN), Valor: Longitud total
+        
+        # Recorrer las características de la capa y agrupar por Tipo y DN
+        for feature in red_layer.getFeatures():
+            try:
+                tipo = feature["Tipo"]
+                dn = feature["DN"]
+                longitud = feature["L"]
+                
+                # Asegurarse de que los valores son válidos
+                if tipo and dn is not None and longitud:
+                    clave = (tipo, dn)
+                    if clave not in resultados:
+                        resultados[clave] = 0
+                    resultados[clave] += longitud
+            except (KeyError, TypeError):
+                # Ignorar características que no tienen los atributos requeridos
+                continue
+        
+        # Verificar si hay resultados para procesar
+        if not resultados:
+            self.iface.messageBar().pushWarning(
+                "Red de Riego",
+                "No se encontraron datos válidos para generar la tabla resumen."
+            )
+            return
+        
+        # Crear una capa de memoria para la tabla resumen
+        vl = QgsVectorLayer("NoGeometry", "resumen_longitud", "memory")
+        pr = vl.dataProvider()
+        
+        # Agregar campos a la capa
+        pr.addAttributes([
+            QgsField("Tipo", QVariant.String),
+            QgsField("DN", QVariant.Int),
+            QgsField("L", QVariant.Double)
+        ])
+        vl.updateFields()
+        
+        # Añadir características a la capa
+        features = []
+        for (tipo, dn), longitud in resultados.items():
+            f = QgsFeature()
+            f.setAttributes([tipo, dn, round(longitud, 2)])
+            features.append(f)
+        
+        pr.addFeatures(features)
+        vl.updateExtents()
+        
+        # Configurar estilo de la tabla para una mejor visualización
+        # (Los campos numéricos se alinean a la derecha, el texto a la izquierda)
+        
+        # Buscar si ya existe una capa con el mismo nombre y eliminarla
+        for child in tablas_group.children():
+            if child.name() == "resumen_longitud":
+                # Eliminar la capa existente
+                QgsProject.instance().removeMapLayer(child.layerId())
+                break
+        
+        # Añadir la capa al proyecto dentro del grupo "Tablas"
+        QgsProject.instance().addMapLayer(vl, False)
+        tablas_group.addLayer(vl)
+        
+        # Configurar el estilo de la tabla
+        vl.setCustomProperty("QFieldSync/checked", "Qt::Checked")  # Para compatibilidad con QField
+        vl.setCustomProperty("QFieldSync/action", "copy")
+        
+        # Informar al usuario
+        self.iface.messageBar().pushSuccess(
+            "Red de Riego",
+            "Se ha creado correctamente la tabla resumen de longitudes por tipo y diámetro."
+        )
+        
+        # Abrir la tabla para mostrarla al usuario
+        self.iface.showAttributeTable(vl)
