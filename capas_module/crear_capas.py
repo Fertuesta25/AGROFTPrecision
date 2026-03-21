@@ -8,7 +8,8 @@ from qgis.core import (
     QgsRectangle,
     QgsCoordinateReferenceSystem,
     QgsCoordinateTransform,
-    QgsRasterLayer
+    QgsRasterLayer,
+    QgsLayerTreeGroup
 )
 from qgis.PyQt.QtCore import QVariant, QMetaType
 from qgis.gui import QgsProjectionSelectionDialog
@@ -127,6 +128,10 @@ class CrearCapasRiego:
             }
         ]
         
+        # Crear el grupo "Proyecto de Riego"
+        root = QgsProject.instance().layerTreeRoot()
+        proyecto_riego_group = root.addGroup("Proyecto de Riego")
+        
         # Crear las capas en memoria
         memory_layers = []
         
@@ -149,8 +154,9 @@ class CrearCapasRiego:
                 layer.loadNamedStyle(style_path)
                 layer.triggerRepaint()
             
-            # Añadir al proyecto
-            QgsProject.instance().addMapLayer(layer)
+            # Añadir al proyecto dentro del grupo
+            QgsProject.instance().addMapLayer(layer, False)  # False para no añadirlo a la raíz
+            proyecto_riego_group.addLayer(layer)  # Añadir al grupo
             memory_layers.append(layer)
         
         # Si se eligió guardar en GeoPackage
@@ -174,6 +180,14 @@ class CrearCapasRiego:
                     for layer in memory_layers:
                         QgsProject.instance().removeMapLayer(layer.id())
                     
+                    # Crear el grupo nuevamente (ya que se eliminaron las capas anteriores)
+                    root = QgsProject.instance().layerTreeRoot()
+                    # Verificar si el grupo ya existe (en caso de que no se haya eliminado)
+                    if not root.findGroup("Proyecto de Riego"):
+                        proyecto_riego_group = root.addGroup("Proyecto de Riego")
+                    else:
+                        proyecto_riego_group = root.findGroup("Proyecto de Riego")
+                    
                     # Cargar las capas desde el GeoPackage
                     for info in layer_info:
                         layer_name = info['name']
@@ -181,7 +195,9 @@ class CrearCapasRiego:
                         new_layer = QgsVectorLayer(uri, layer_name, 'ogr')
                         
                         if new_layer.isValid():
-                            QgsProject.instance().addMapLayer(new_layer)
+                            # Añadir al proyecto dentro del grupo
+                            QgsProject.instance().addMapLayer(new_layer, False)
+                            proyecto_riego_group.addLayer(new_layer)
                         else:
                             QMessageBox.warning(self.iface.mainWindow(), "Error", 
                                                f"No se pudo cargar la capa {layer_name} desde el GeoPackage.")
@@ -199,8 +215,9 @@ class CrearCapasRiego:
     def zoom_a_peru(self):
         """Hace zoom a la extensión del Perú"""
         # Coordenadas aproximadas de Perú en lat/lon (EPSG:4326)
-        peru_extent = QgsRectangle(-84.6, -18.4, -68.7, 0.0)
+        peru_extent = QgsRectangle(-79.2, -9.6, -74.1, -4.9)
         
+
         # Obtener el sistema de referencia de coordenadas del lienzo
         canvas = self.iface.mapCanvas()
         canvas_crs = canvas.mapSettings().destinationCrs()
