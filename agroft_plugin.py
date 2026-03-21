@@ -9,6 +9,12 @@ from .capas_module.crear_capas import CrearCapasRiego
 from .puntos_module import get_module_instance as get_puntos_module
 from .redriego_module.panel_redriego import PanelRedRiego
 from .divisor_module.divisor_poligono import DivisorPoligono
+from .dividirlineas_module import get_module_instance as get_dividirlineas_module
+from .enumerar_poligonos_module import get_module_instance as get_enumerar_poligonos_module
+from .vertices_module import get_module_instance as get_vertices_module  # Módulo de vértices
+from .plantillas_module import get_module_instance as get_plantillas_module  # Nuevo módulo de plantillas
+from .altura_module.altura_dialog import AlturaDialog  # NUEVO: Módulo de alturas
+from .balsas_module import get_module_instance as get_balsas_module
 
 class AgroFTPrecisionPlugin:
     def __init__(self, iface):
@@ -23,13 +29,28 @@ class AgroFTPrecisionPlugin:
         self.puntos_module = None
         self.panel_redriego = None
         self.divisor_poligono = None
+        self.dividirlineas_module = None
+        self.enumerar_poligonos_module = None
+        self.vertices_module = None  # Módulo de vértices
+        self.plantillas_module = None  # Nuevo módulo de plantillas
+        self.balsas_module = None  # Nuevo módulo de balsas
         self.actions = []
         
     def initGui(self):
-        # Crear barra de herramientas personalizada
-        self.toolbar = self.iface.addToolBar("AGROFT Precisión")
-        self.toolbar.setObjectName("AGROFTPrecisionToolbar")
+        # Buscar si la barra ya existe antes de crearla
+        main_window = self.iface.mainWindow()
+        existing_toolbar = main_window.findChild(QToolBar, "AGROFTPrecisionToolbar")
         
+        if existing_toolbar:
+            self.toolbar = existing_toolbar
+        else:
+            # Crear barra de herramientas personalizada solo si no existe
+            self.toolbar = self.iface.addToolBar("AGROFT Precisión")
+            self.toolbar.setObjectName("AGROFTPrecisionToolbar")
+        
+        # Limpiar la barra de herramientas antes de añadir acciones
+        self.toolbar.clear()
+
         # 1. Acción para el Filtro por Campo
         icon_path = os.path.join(self.plugin_dir, "resources/icons/filter_icon.svg")
         filter_action = QAction(QIcon(icon_path), "Filtro por Campo", self.iface.mainWindow())
@@ -80,7 +101,47 @@ class AgroFTPrecisionPlugin:
         self.toolbar.addAction(divisor_partes_action)
         self.actions.append(divisor_partes_action)
 
+        # 8. Acción para Dividir Líneas con Puntos
+        icon_path = os.path.join(self.plugin_dir, "resources/icons/dividirlineas_icon.svg")
+        dividirlineas_action = QAction(QIcon(icon_path), "Dividir Líneas con Puntos", self.iface.mainWindow())
+        dividirlineas_action.triggered.connect(self.dividir_lineas)
+        self.toolbar.addAction(dividirlineas_action)
+        self.actions.append(dividirlineas_action)
 
+        # 9. Acción para Enumerar Polígonos
+        icon_path = os.path.join(self.plugin_dir, "resources/icons/enumerar_icon.svg")
+        enumerar_action = QAction(QIcon(icon_path), "Enumerar Polígonos", self.iface.mainWindow())
+        enumerar_action.triggered.connect(self.enumerar_poligonos)
+        self.toolbar.addAction(enumerar_action)
+        self.actions.append(enumerar_action)
+        
+        # 10. Acción para Extraer Vértices de Polígonos
+        icon_path = os.path.join(self.plugin_dir, "resources/icons/vertices_icon.svg")
+        vertices_action = QAction(QIcon(icon_path), "Extraer Vértices", self.iface.mainWindow())
+        vertices_action.triggered.connect(self.extraer_vertices)
+        self.toolbar.addAction(vertices_action)
+        self.actions.append(vertices_action)
+        
+        # 11. NUEVA: Acción para el módulo de Plantillas de Mapas
+        icon_path = os.path.join(self.plugin_dir, "resources/icons/plantillas_icon.svg")
+        plantillas_action = QAction(QIcon(icon_path), "Plantillas de Mapas", self.iface.mainWindow())
+        plantillas_action.triggered.connect(self.plantillas_panel)
+        self.toolbar.addAction(plantillas_action)
+        self.actions.append(plantillas_action)
+
+        # 12. NUEVA: Acción para Extractor de Alturas
+        icon_path = os.path.join(self.plugin_dir, "resources/icons/altura_icon.svg")
+        altura_action = QAction(QIcon(icon_path), "Extraer Alturas de Red de Riego", self.iface.mainWindow())
+        altura_action.triggered.connect(self.extractor_alturas)
+        self.toolbar.addAction(altura_action)
+        self.actions.append(altura_action)
+
+        # 13. NUEVA: Acción para Cálculo de Balsas de Riego
+        icon_path = os.path.join(self.plugin_dir, "resources/icons/balsas_icon.svg")
+        balsas_action = QAction(QIcon(icon_path), "Cálculo de Balsas de Riego", self.iface.mainWindow())
+        balsas_action.triggered.connect(self.balsas_panel)
+        self.toolbar.addAction(balsas_action)
+        self.actions.append(balsas_action)
         
         # También añadir al menú de plugins
         for action in self.actions:
@@ -95,13 +156,16 @@ class AgroFTPrecisionPlugin:
         except Exception as e:
             print(f"Error al eliminar acciones del menú: {str(e)}")
         
-        # Limpiar barra de herramientas sin usar self.toolbar directamente
+        # Eliminar la barra de herramientas completamente
         try:
-            # Buscar la barra de herramientas por su nombre
-            for toolbar in self.iface.mainWindow().findChildren(QToolBar, "AGROFTPrecisionToolbar"):
-                toolbar.clear()
+            main_window = self.iface.mainWindow()
+            toolbar = main_window.findChild(QToolBar, "AGROFTPrecisionToolbar")
+            if toolbar:
+                main_window.removeToolBar(toolbar)
+                # Si es necesario, también eliminar del objeto
+                toolbar.deleteLater()
         except Exception as e:
-            print(f"Error al limpiar toolbar: {str(e)}")
+            print(f"Error al eliminar toolbar: {str(e)}")
         
         # Cerrar paneles y liberar recursos
         try:
@@ -146,6 +210,42 @@ class AgroFTPrecisionPlugin:
                 self.divisor_poligono = None
         except Exception as e:
             print(f"Error al limpiar divisor_poligono: {str(e)}")
+
+        try:
+            if self.dividirlineas_module:
+                self.dividirlineas_module.unload()
+                self.dividirlineas_module = None
+        except Exception as e:
+            print(f"Error al limpiar dividirlineas_module: {str(e)}")
+            
+        try:
+            if self.enumerar_poligonos_module:
+                self.enumerar_poligonos_module.unload()
+                self.enumerar_poligonos_module = None
+        except Exception as e:
+            print(f"Error al limpiar enumerar_poligonos_module: {str(e)}")
+            
+        try:
+            if self.vertices_module:
+                self.vertices_module.unload()
+                self.vertices_module = None
+        except Exception as e:
+            print(f"Error al limpiar vertices_module: {str(e)}")
+            
+        try:
+            if self.plantillas_module:  # Liberación del nuevo módulo
+                self.plantillas_module.unload()
+                self.plantillas_module = None
+        except Exception as e:
+            print(f"Error al limpiar plantillas_module: {str(e)}")
+
+        try:
+            if self.balsas_module:
+                self.balsas_module.close()
+                self.balsas_module.deleteLater()
+                self.balsas_module = None
+        except Exception as e:
+            print(f"Error al limpiar balsas_module: {str(e)}")
     
     def toggle_filter_dock(self):
         """Alterna la visibilidad del panel de filtrado"""
@@ -208,4 +308,64 @@ class AgroFTPrecisionPlugin:
         except Exception as e:
             from qgis.PyQt.QtWidgets import QMessageBox
             QMessageBox.critical(None, "Error", str(e))
+
+    def dividir_lineas(self):
+        """Ejecuta el módulo de dividir líneas con puntos"""
+        if self.dividirlineas_module is None:
+            self.dividirlineas_module = get_dividirlineas_module(self.iface)
+        self.dividirlineas_module.toggle_panel()
+        
+    def enumerar_poligonos(self):
+        """Ejecuta el módulo de enumerar polígonos"""
+        if self.enumerar_poligonos_module is None:
+            self.enumerar_poligonos_module = get_enumerar_poligonos_module(self.iface)
+        self.enumerar_poligonos_module.toggle_panel()
+        
+    def extraer_vertices(self):
+        """Ejecuta el módulo de extracción de vértices de polígonos"""
+        if self.vertices_module is None:
+            self.vertices_module = get_vertices_module(self.iface)
+        
+        # Verificar si el panel está visible
+        if not self.vertices_module.isVisible():
+            self.vertices_module.show()
+            self.vertices_module.raise_()
+        else:
+            # Si ya está visible, simplemente lo llevamos al frente
+            self.vertices_module.raise_()
+        
+    def plantillas_panel(self):
+        """Alterna la visibilidad del panel de plantillas de mapas"""
+        if not self.plantillas_module:
+            self.plantillas_module = get_plantillas_module(self.iface)
+            # Acoplar el panel en el área derecha
+            self.iface.addDockWidget(Qt.RightDockWidgetArea, self.plantillas_module)
+        else:
+            self.plantillas_module.toggle_panel()
+
+    def extractor_alturas(self):
+        """NUEVO: Ejecuta la herramienta de extracción de alturas"""
+        try:
+            # Crear y mostrar el diálogo de alturas
+            self.altura_dialog = AlturaDialog(self.iface.mainWindow())
+            self.altura_dialog.exec_()
+        except Exception as e:
+            from qgis.PyQt.QtWidgets import QMessageBox
+            QMessageBox.critical(
+                self.iface.mainWindow(),
+                "Error",
+                f"Error ejecutando extractor de alturas: {str(e)}"
+            )
+
+    def balsas_panel(self):
+        """Alterna la visibilidad del panel de balsas de riego"""
+        if not self.balsas_module:
+            self.balsas_module = get_balsas_module(self.iface)
+            # Acoplar el panel en el área derecha
+            self.iface.addDockWidget(Qt.RightDockWidgetArea, self.balsas_module)
+        else:
+            if self.balsas_module.isVisible():
+                self.balsas_module.hide()
+            else:
+                self.balsas_module.show_and_activate()
     
