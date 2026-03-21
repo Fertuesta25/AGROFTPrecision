@@ -2,16 +2,18 @@
 <!-- Created with Inkscape (http://www.inkscape.org/) -->
 
 <svg
-   width="44.599529mm"
-   height="44.599541mm"
-   viewBox="0 0 44.599529 44.599541"
+   width="28.567314mm"
+   height="30.343473mm"
+   viewBox="0 0 28.567314 30.343473"
    version="1.1"
    id="svg1"
+   inkscape:version="1.4 (86a8ad7, 2024-10-11)"
+   sodipodi:docname="dibujo-1.svg"
+   xml:space="preserve"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns="http://www.w3.org/2000/svg"
-   xmlns:svg="http://www.w3.org/2000/svg">
-  <sodipodi:namedview
+   xmlns:svg="http://www.w3.org/2000/svg"><sodipodi:namedview
      id="namedview1"
      pagecolor="#ffffff"
      bordercolor="#000000"
@@ -21,67 +23,55 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
-     showguides="false">
-    <inkscape:page
-       x="0"
+     showguides="false"
+     inkscape:zoom="0.63496761"
+     inkscape:cx="596.88084"
+     inkscape:cy="804.76546"
+     inkscape:window-width="2240"
+     inkscape:window-height="1294"
+     inkscape:window-x="-11"
+     inkscape:window-y="-11"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer1"><inkscape:page
+       x="3.0810923e-15"
        y="0"
-       width="44.599529"
-       height="44.599541"
+       width="28.567312"
+       height="30.343473"
        id="page2"
        margin="0"
-       bleed="0" />
-  </sodipodi:namedview>
-  <defs
-     id="defs1" />
-  <g
+       bleed="0" /></sodipodi:namedview><defs
+     id="defs1" /><g
      inkscape:label="Capa 1"
      inkscape:groupmode="layer"
      id="layer1"
-     transform="translate(-132.8875,-114.03007)">
-    <g
-       id="g2"
-       transform="matrix(0.58572578,0,0,0.58572578,111.36154,54.456054)">
-      <path
+     transform="translate(-285.41138,-126.53724)"><g
+       id="g2-7"
+       transform="matrix(0.58572578,0,0,0.58572578,255.86931,59.835213)"
+       inkscape:export-filename="lineas_paralelas.svg"
+       inkscape:export-xdpi="11.767221"
+       inkscape:export-ydpi="11.767221"><path
          style="fill:none;stroke:#000000;stroke-width:3.023"
          d="M 57.805916,129.99871 78.672522,115.10968"
-         id="path1" />
-      <path
+         id="path1-5" /><path
          style="fill:none;stroke:#000000;stroke-width:3.023"
          d="M 61.082374,134.59059 81.94898,119.70156"
-         id="path1-8" />
-      <path
+         id="path1-8-4" /><path
          style="fill:none;stroke:#000000;stroke-width:3.023"
          d="M 64.358833,139.18246 85.225439,124.29343"
-         id="path1-8-5" />
-      <path
+         id="path1-8-5-1" /><path
          style="fill:none;stroke:#000000;stroke-width:3.023"
          d="M 67.635292,143.77434 88.501899,128.88531"
-         id="path1-8-1" />
-      <path
+         id="path1-8-1-2" /><path
          style="fill:none;stroke:#000000;stroke-width:3.023"
          d="M 70.91175,148.36621 91.778358,133.47718"
-         id="path1-8-7" />
-      <path
+         id="path1-8-7-0" /><path
          style="fill:none;stroke:#000000;stroke-width:3.023"
          d="M 74.188209,152.95809 95.054815,138.06906"
-         id="path1-8-7-2" />
-      <path
+         id="path1-8-7-2-0" /><path
          style="fill:none;stroke:#000000;stroke-width:3.023"
          d="M 77.464668,157.54996 98.331275,142.66093"
-         id="path1-8-7-1" />
-      <path
+         id="path1-8-7-1-14" /><path
          style="fill:none;stroke:#000000;stroke-width:3.023"
          d="m 51.662967,126.46228 27.627116,38.33825"
-         id="path2"
-         sodipodi:nodetypes="cc" />
-    </g>
-    <rect
-       style="fill:none;stroke:#000000;stroke-width:3.023;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1"
-       id="rect2-7-3"
-       width="41.576527"
-       height="41.576534"
-       x="134.399"
-       y="115.54156"
-       ry="10.707058" />
-  </g>
-</svg>
+         id="path2-6"
+         sodipodi:nodetypes="cc" /></g></g></svg>
