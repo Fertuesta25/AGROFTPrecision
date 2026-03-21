@@ -1,5 +1,6 @@
-# AGROFT Precision
-**AGROFT Precision** es un completo plugin para QGIS enfocado en el diseño y documentación de proyectos de **riego de precisión**, integrando herramientas modulares para facilitar tareas agronómicas, hidráulicas y cartográficas en campo.
+# agroft_precision
+
+**agroft_precision** es un completo plugin para QGIS enfocado en el diseño y documentación de proyectos de **riego de precisión**, integrando herramientas modulares para facilitar tareas agronómicas, hidráulicas y cartográficas en campo.
 
 ## 🎯 Funcionalidades principales
 
