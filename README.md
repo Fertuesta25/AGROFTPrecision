@@ -105,4 +105,4 @@ Al activar el dibujo en el panel **Red de Riego**:
 
 ## 📌 Créditos
 
-Desarrollado por **Fernando Tuesta**, como parte de un proyecto de digitalización y diseño técnico de redes de riego agrícola con herramientas SIG.
+Desarrollado por **Fernando Tuesta** con apoyo de la IA Claude, como parte de un proyecto de digitalización y diseño técnico de redes de riego agrícola con herramientas SIG.
