@@ -1,3 +1,7 @@
+"""
+Plugin principal para la creación y filtrado de capas de riego
+(Compatible con QGIS 3.x/Qt5 y QGIS 4.x/Qt6)
+"""
 import os
 from qgis.PyQt.QtWidgets import QAction, QMessageBox, QFileDialog, QCheckBox, QDialog, QVBoxLayout, QPushButton
 from qgis.PyQt.QtGui import QIcon
@@ -52,14 +56,16 @@ class CrearCapasRiego:
             
         btn_continue.clicked.connect(on_continue)
         
-        # Mostrar el diálogo
-        if not dialog.exec_():
+        # Mostrar el diálogo (Actualizado a exec() para Qt6)
+        if not dialog.exec():
             return
             
         # Mostrar diálogo para elegir el CRS
         crs_dialog = QgsProjectionSelectionDialog()
         crs_dialog.setWindowTitle('Seleccionar CRS para las capas')
-        if crs_dialog.exec_():
+        
+        # Actualizado a exec() para Qt6
+        if crs_dialog.exec():
             crs = crs_dialog.crs().authid()
         else:
             QMessageBox.warning(self.iface.mainWindow(), "Crear Capas de Riego", "No se seleccionó un CRS.")
@@ -83,17 +89,17 @@ class CrearCapasRiego:
                 'name': 'Red de riego',
                 'geom_type': 'LineString',
                 'attributes': [
-                    QgsField("id", QMetaType.Int),
-                    QgsField('Tipo', QMetaType.QString),
-                    QgsField('DN', QMetaType.Int),
-                    QgsField('Di', QMetaType.Int),
-                    QgsField('L', QMetaType.Double),
-                    QgsField('Sector', QMetaType.Int),
-                    QgsField('Material', QMetaType.QString),
-                    QgsField('Tipo_riego', QMetaType.QString),
-                    QgsField('D_emisor', QMetaType.Double),
-                    QgsField('Q_emisor', QMetaType.Double),
-                    QgsField('Q_total', QMetaType.Double),
+                    QgsField("id", QMetaType.Type.Int),
+                    QgsField('Tipo', QMetaType.Type.QString),
+                    QgsField('DN', QMetaType.Type.Int),
+                    QgsField('Di', QMetaType.Type.Int),
+                    QgsField('L', QMetaType.Type.Double),
+                    QgsField('Sector', QMetaType.Type.Int),
+                    QgsField('Material', QMetaType.Type.QString),
+                    QgsField('Tipo_riego', QMetaType.Type.QString),
+                    QgsField('D_emisor', QMetaType.Type.Double),
+                    QgsField('Q_emisor', QMetaType.Type.Double),
+                    QgsField('Q_total', QMetaType.Type.Double),
                 ],
                 'style': 'red_de_riego.qml'
             },
@@ -101,8 +107,8 @@ class CrearCapasRiego:
                 'name': 'Accesorios',
                 'geom_type': 'Point',
                 'attributes': [
-                    QgsField('Nombre', QMetaType.QString),
-                    QgsField('Tipo', QMetaType.QString),
+                    QgsField('Nombre', QMetaType.Type.QString),
+                    QgsField('Tipo', QMetaType.Type.QString),
                 ],
                 'style': 'accesorios.qml'
             },
@@ -110,11 +116,11 @@ class CrearCapasRiego:
                 'name': 'Sectores',
                 'geom_type': 'Polygon',
                 'attributes': [
-                    QgsField('N', QMetaType.Int),
-                    QgsField('Area', QMetaType.Double),
-                    QgsField('Perimetro', QMetaType.Double),
-                    QgsField('L_lateral', QMetaType.Double),
-                    QgsField('Q_total', QMetaType.Double),
+                    QgsField('N', QMetaType.Type.Int),
+                    QgsField('Area', QMetaType.Type.Double),
+                    QgsField('Perimetro', QMetaType.Type.Double),
+                    QgsField('L_lateral', QMetaType.Type.Double),
+                    QgsField('Q_total', QMetaType.Type.Double),
                 ],
                 'style': 'sectores.qml'
             },
@@ -122,7 +128,7 @@ class CrearCapasRiego:
                 'name': 'Cotas',
                 'geom_type': 'LineString',
                 'attributes': [
-                    QgsField('Lado', QMetaType.QString, '', 20),
+                    QgsField('Lado', QMetaType.Type.QString, '', 20),
                 ],
                 'style': 'cotas.qml'
             }

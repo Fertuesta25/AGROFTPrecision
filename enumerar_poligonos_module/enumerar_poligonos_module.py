@@ -1,11 +1,11 @@
 import os
 from qgis.PyQt.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                                 QLabel, QComboBox, QLineEdit, QMessageBox, QDockWidget)
-from qgis.PyQt.QtCore import Qt, QVariant
+from qgis.PyQt.QtCore import Qt, QVariant, QMetaType
 from qgis.PyQt.QtGui import QColor
 from qgis.core import (QgsProject, QgsFeature, QgsGeometry, QgsField, QgsFields, 
                       QgsVectorLayer, QgsFeatureRequest, QgsWkbTypes, 
-                      QgsPointXY, QgsVectorFileWriter, QgsCoordinateTransform, QgsCoordinateReferenceSystem)
+                      QgsPointXY, QgsVectorFileWriter, QgsCoordinateTransform, QgsCoordinateReferenceSystem, Qgis)
 from qgis.gui import QgsMapToolEmitPoint, QgsRubberBand
 
 class EnumerarPoligonosPanel(QDockWidget):
@@ -132,7 +132,7 @@ class EnumerarPoligonosPanel(QDockWidget):
         self.iface.messageBar().pushMessage(
             "Enumerar Polígonos", 
             "Haga clic para agregar puntos a la polilínea. Clic derecho para finalizar.",
-            level=1, # Info
+            level=Qgis.MessageLevel.Warning,  # 1 = Warning en el esquema antiguo
             duration=5
         )
         
@@ -141,7 +141,7 @@ class EnumerarPoligonosPanel(QDockWidget):
     
     def agregar_punto(self, point, button):
         """Añade un punto a la línea de dirección"""
-        if button == Qt.LeftButton:
+        if button == Qt.MouseButton.LeftButton:
             # Agregar punto izquierdo a la línea
             punto = QgsPointXY(point)
             self.linea_puntos.append(punto)
@@ -156,7 +156,7 @@ class EnumerarPoligonosPanel(QDockWidget):
             if len(self.linea_puntos) >= 2:
                 self.enumerar_btn.setEnabled(True)
                 
-        elif button == Qt.RightButton and len(self.linea_puntos) >= 2:
+        elif button == Qt.MouseButton.RightButton and len(self.linea_puntos) >= 2:
             # Finalizar la línea con clic derecho
             self.canvas.unsetMapTool(self.maptool)
             self.dibujar_btn.setEnabled(True)
@@ -165,7 +165,7 @@ class EnumerarPoligonosPanel(QDockWidget):
             self.iface.messageBar().pushMessage(
                 "Enumerar Polígonos", 
                 f"Polilínea completada con {len(self.linea_puntos)} puntos. Haga clic en 'Enumerar polígonos' para continuar.",
-                level=1, # Info
+                level=Qgis.MessageLevel.Warning,  # 1 = Warning en el esquema antiguo
                 duration=3
             )
     
@@ -206,7 +206,7 @@ class EnumerarPoligonosPanel(QDockWidget):
             index = layer.fields().indexFromName(field_name)
             if index == -1:  # El campo no existe
                 layer.startEditing()
-                layer.addAttribute(QgsField(field_name, QVariant.String))
+                layer.addAttribute(QgsField(field_name, QMetaType.Type.QString))
                 layer.commitChanges()
             
         # Obtener polilínea de dirección
@@ -329,7 +329,7 @@ class EnumerarPoligonosModule:
         """Alterna la visibilidad del panel"""
         if not self.panel:
             self.panel = EnumerarPoligonosPanel(self.iface)
-            self.iface.addDockWidget(Qt.RightDockWidgetArea, self.panel)
+            self.iface.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.panel)
         else:
             if self.panel.isVisible():
                 self.panel.hide()

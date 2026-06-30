@@ -1,4 +1,9 @@
 # balsas_module/calcular_volumen_balsa_v3.py
+"""
+Algoritmo para calcular volumen de balsas de riego - Version 3.0 con 3D
+(Compatible con QGIS 3.x/Qt5 y QGIS 4.x/Qt6)
+"""
+
 from qgis.core import (
     QgsProcessing,
     QgsProcessingAlgorithm,
@@ -16,7 +21,7 @@ from qgis.core import (
     QgsCoordinateReferenceSystem,
     Qgis
 )
-from qgis.PyQt.QtCore import QVariant, QCoreApplication
+from qgis.PyQt.QtCore import QVariant, QCoreApplication, QMetaType
 import math
 
 class CalcularVolumenBalsaV3(QgsProcessingAlgorithm):
@@ -301,32 +306,32 @@ class CalcularVolumenBalsaV3(QgsProcessingAlgorithm):
             fields.append(field)
         
         campos_nuevos = [
-            ('area_sup_m2', QVariant.Double),
-            ('area_inf_m2', QVariant.Double),
-            ('area_util_m2', QVariant.Double),
-            ('perimetro_m', QVariant.Double),
-            ('vol_util_m3', QVariant.Double),
-            ('vol_total_m3', QVariant.Double),
-            ('vol_muerto_m3', QVariant.Double),
-            ('cap_util_L', QVariant.Double),
-            ('cap_total_L', QVariant.Double),
-            ('cap_muerto_L', QVariant.Double),
-            ('prof_efect_m', QVariant.Double),
-            ('reduccion_m', QVariant.Double),
-            ('relacion_areas', QVariant.Double),
-            ('area_revestimiento_m2', QVariant.Double),
-            ('area_revestimiento_comercial_m2', QVariant.Double),
-            ('valido', QVariant.Bool)
+            ('area_sup_m2', QMetaType.Type.Double),
+            ('area_inf_m2', QMetaType.Type.Double),
+            ('area_util_m2', QMetaType.Type.Double),
+            ('perimetro_m', QMetaType.Type.Double),
+            ('vol_util_m3', QMetaType.Type.Double),
+            ('vol_total_m3', QMetaType.Type.Double),
+            ('vol_muerto_m3', QMetaType.Type.Double),
+            ('cap_util_L', QMetaType.Type.Double),
+            ('cap_total_L', QMetaType.Type.Double),
+            ('cap_muerto_L', QMetaType.Type.Double),
+            ('prof_efect_m', QMetaType.Type.Double),
+            ('reduccion_m', QMetaType.Type.Double),
+            ('relacion_areas', QMetaType.Type.Double),
+            ('area_revestimiento_m2', QMetaType.Type.Double),
+            ('area_revestimiento_comercial_m2', QMetaType.Type.Double),
+            ('valido', QMetaType.Type.Bool)
         ]
         
         for nombre, tipo in campos_nuevos:
             campo = QgsField()
             campo.setName(nombre)
-            if tipo == QVariant.Double:
-                campo.setType(QVariant.Double)
+            if tipo == QMetaType.Type.Double:
+                campo.setType(QMetaType.Type.Double)
                 campo.setTypeName('double')
-            elif tipo == QVariant.Bool:
-                campo.setType(QVariant.Bool)
+            elif tipo == QMetaType.Type.Bool:
+                campo.setType(QMetaType.Type.Bool)
                 campo.setTypeName('bool')
             fields.append(campo)
         
@@ -339,22 +344,22 @@ class CalcularVolumenBalsaV3(QgsProcessingAlgorithm):
             fields.append(field)
         
         campos_3d = [
-            ('nivel_balsa', QVariant.String),
-            ('elevacion_z', QVariant.Double),
-            ('area_m2', QVariant.Double),
-            ('perimetro_m', QVariant.Double),
-            ('descripcion', QVariant.String),
-            ('color_sugerido', QVariant.String)
+            ('nivel_balsa', QMetaType.Type.QString),
+            ('elevacion_z', QMetaType.Type.Double),
+            ('area_m2', QMetaType.Type.Double),
+            ('perimetro_m', QMetaType.Type.Double),
+            ('descripcion', QMetaType.Type.QString),
+            ('color_sugerido', QMetaType.Type.QString)
         ]
         
         for nombre, tipo in campos_3d:
             campo = QgsField()
             campo.setName(nombre)
-            if tipo == QVariant.Double:
-                campo.setType(QVariant.Double)
+            if tipo == QMetaType.Type.Double:
+                campo.setType(QMetaType.Type.Double)
                 campo.setTypeName('double')
-            elif tipo == QVariant.String:
-                campo.setType(QVariant.String)
+            elif tipo == QMetaType.Type.QString:
+                campo.setType(QMetaType.Type.QString)
                 campo.setTypeName('string')
             fields.append(campo)
         
@@ -367,25 +372,25 @@ class CalcularVolumenBalsaV3(QgsProcessingAlgorithm):
             fields.append(field)
         
         campos_combinado = [
-            ('nivel_balsa', QVariant.String),
-            ('area_nivel_m2', QVariant.Double),
-            ('perimetro_nivel_m', QVariant.Double),
-            ('altura_superficie_m', QVariant.Double),
-            ('altura_base_m', QVariant.Double),
-            ('reduccion_m', QVariant.Double),
-            ('volumen_m3', QVariant.Double),
-            ('capacidad_L', QVariant.Double),
-            ('descripcion', QVariant.String)
+            ('nivel_balsa', QMetaType.Type.QString),
+            ('area_nivel_m2', QMetaType.Type.Double),
+            ('perimetro_nivel_m', QMetaType.Type.Double),
+            ('altura_superficie_m', QMetaType.Type.Double),
+            ('altura_base_m', QMetaType.Type.Double),
+            ('reduccion_m', QMetaType.Type.Double),
+            ('volumen_m3', QMetaType.Type.Double),
+            ('capacidad_L', QMetaType.Type.Double),
+            ('descripcion', QMetaType.Type.QString)
         ]
         
         for nombre, tipo in campos_combinado:
             campo = QgsField()
             campo.setName(nombre)
-            if tipo == QVariant.Double:
-                campo.setType(QVariant.Double)
+            if tipo == QMetaType.Type.Double:
+                campo.setType(QMetaType.Type.Double)
                 campo.setTypeName('double')
-            elif tipo == QVariant.String:
-                campo.setType(QVariant.String)
+            elif tipo == QMetaType.Type.QString:
+                campo.setType(QMetaType.Type.QString)
                 campo.setTypeName('string')
             fields.append(campo)
         
@@ -405,8 +410,7 @@ class CalcularVolumenBalsaV3(QgsProcessingAlgorithm):
                 else:
                     epsg_code = 32700 + zona_utm
                 
-                crs_utm = QgsCoordinateReferenceSystem()
-                crs_utm.createFromEpsg(epsg_code)
+                crs_utm = QgsCoordinateReferenceSystem(f"EPSG:{epsg_code}")
                 
                 transform = QgsCoordinateTransform(crs_origen, crs_utm, context.transformContext())
                 geom_utm = QgsGeometry(geometria)
@@ -451,19 +455,16 @@ class CalcularVolumenBalsaV3(QgsProcessingAlgorithm):
         
         # Cálculo de volúmenes usando fórmula de prismoide
         if area_base > 0:
-            if area_piso_muerto > area_base:
-                vol_util = (prof_efectiva / 3) * (area_util + area_piso_muerto + math.sqrt(area_util * area_piso_muerto))
-            else:
-                vol_util = (prof_efectiva / 3) * (area_util + area_base + math.sqrt(area_util * area_base))
+            # El volumen útil va del nivel útil al piso muerto (no hasta la base).
+            # Por construcción del buffer, area_piso_muerto >= area_base.
+            vol_util = (prof_efectiva / 3) * (area_util + area_piso_muerto + math.sqrt(area_util * area_piso_muerto))
             
             vol_total = (prof_total / 3) * (area_sup + area_base + math.sqrt(area_sup * area_base))
             
-            if area_piso_muerto > area_base:
-                vol_muerto = (piso_muerto / 3) * (area_piso_muerto + area_base + math.sqrt(area_piso_muerto * area_base))
-            else:
-                vol_muerto = piso_muerto * area_base
+            vol_muerto = (piso_muerto / 3) * (area_piso_muerto + area_base + math.sqrt(area_piso_muerto * area_base))
         else:
-            vol_util = (prof_efectiva * area_sup) / 3
+            # La base colapsa a un punto -> pirámide (V = h*A/3)
+            vol_util = (prof_efectiva * area_util) / 3
             vol_total = (prof_total * area_sup) / 3
             vol_muerto = 0
         

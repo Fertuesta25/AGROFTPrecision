@@ -1,8 +1,9 @@
 [general]
 name=AGROFT Precisión
-qgisMinimumVersion=3.30
+qgisMinimumVersion=3.38
+qgisMaximumVersion=4.99
 description=Conjunto de herramientas para agricultura de precisión que incluye filtrado de capas y generación de líneas desde bases.
-version=1.0.0
+version=1.2.5
 author=AGROFT Team
 email=contacto@agroft.com
 about=Este plugin proporciona herramientas para la agricultura de precisión, incluyendo filtrado avanzado de capas vectoriales y generación de líneas desde líneas base con direcciones específicas.

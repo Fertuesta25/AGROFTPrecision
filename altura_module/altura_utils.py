@@ -7,7 +7,8 @@ from qgis.core import (
     QgsVectorLayer, QgsRasterLayer, QgsProject, QgsCoordinateReferenceSystem,
     QgsCoordinateTransform, QgsPointXY, QgsGeometry, QgsFeature
 )
-from PyQt5.QtWidgets import QMessageBox
+# Cambio a la capa de compatibilidad dinámica de QGIS
+from qgis.PyQt.QtWidgets import QMessageBox
 
 
 class AlturaUtils:

@@ -1,5 +1,6 @@
 """
 Configuración del módulo de extracción de alturas
+(Compatible con QGIS 3.x/Qt5 y QGIS 4.x/Qt6)
 """
 
 # Configuraciones por defecto

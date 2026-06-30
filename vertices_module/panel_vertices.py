@@ -3,7 +3,7 @@ import math
 from qgis.PyQt.QtWidgets import (QDockWidget, QWidget, QVBoxLayout, QLabel, 
                                QPushButton, QComboBox, QMessageBox, QFileDialog,
                                QRadioButton, QButtonGroup, QHBoxLayout, QCheckBox, QGroupBox)
-from qgis.PyQt.QtCore import Qt, QVariant
+from qgis.PyQt.QtCore import Qt, QVariant, QMetaType
 from qgis.PyQt.QtGui import QIcon, QColor
 from qgis.core import (QgsVectorLayer, QgsFeature, QgsGeometry, QgsField, 
                      QgsFields, QgsPointXY, QgsProject, QgsWkbTypes,
@@ -18,7 +18,7 @@ class PanelVertices(QDockWidget):
         super(PanelVertices, self).__init__("Extracción de Vértices de Polígonos")
         self.iface = iface
         self.plugin_dir = os.path.dirname(os.path.dirname(__file__))
-        self.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        self.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea)
         
         # Conectar evento de cierre para actualizar estado
         self.closeEvent = self.on_close_event
@@ -264,17 +264,17 @@ class PanelVertices(QDockWidget):
         # Campos básicos
         vertice_field = QgsField()
         vertice_field.setName("Vertice")
-        vertice_field.setType(QVariant.Int)
+        vertice_field.setType(QMetaType.Type.Int)
         fields.append(vertice_field)
         
         lado_field = QgsField()
         lado_field.setName("Lado")
-        lado_field.setType(QVariant.String)
+        lado_field.setType(QMetaType.Type.QString)
         fields.append(lado_field)
         
         distancia_field = QgsField()
         distancia_field.setName("Distancia")
-        distancia_field.setType(QVariant.Double)
+        distancia_field.setType(QMetaType.Type.Double)
         distancia_field.setTypeName("double")
         distancia_field.setLength(10)
         distancia_field.setPrecision(3)
@@ -282,7 +282,7 @@ class PanelVertices(QDockWidget):
         
         angulo_field = QgsField()
         angulo_field.setName("Angulo")
-        angulo_field.setType(QVariant.Double)
+        angulo_field.setType(QMetaType.Type.Double)
         angulo_field.setTypeName("double")
         angulo_field.setLength(10)
         angulo_field.setPrecision(2)
@@ -292,7 +292,7 @@ class PanelVertices(QDockWidget):
         if include_azimuth:
             azimut_field = QgsField()
             azimut_field.setName("Azimut")
-            azimut_field.setType(QVariant.Double)
+            azimut_field.setType(QMetaType.Type.Double)
             azimut_field.setTypeName("double")
             azimut_field.setLength(10)
             azimut_field.setPrecision(2)
@@ -300,7 +300,7 @@ class PanelVertices(QDockWidget):
         
         x_field = QgsField()
         x_field.setName("X")
-        x_field.setType(QVariant.Double)
+        x_field.setType(QMetaType.Type.Double)
         x_field.setTypeName("double")
         x_field.setLength(15)
         x_field.setPrecision(6)
@@ -308,7 +308,7 @@ class PanelVertices(QDockWidget):
         
         y_field = QgsField()
         y_field.setName("Y")
-        y_field.setType(QVariant.Double)
+        y_field.setType(QMetaType.Type.Double)
         y_field.setTypeName("double")
         y_field.setLength(15)
         y_field.setPrecision(6)
@@ -318,7 +318,7 @@ class PanelVertices(QDockWidget):
         if use_extra_coords:
             x2_field = QgsField()
             x2_field.setName(f"X_{extra_crs.authid().replace(':', '_')}")
-            x2_field.setType(QVariant.Double)
+            x2_field.setType(QMetaType.Type.Double)
             x2_field.setTypeName("double")
             x2_field.setLength(15)
             x2_field.setPrecision(6)
@@ -326,7 +326,7 @@ class PanelVertices(QDockWidget):
             
             y2_field = QgsField()
             y2_field.setName(f"Y_{extra_crs.authid().replace(':', '_')}")
-            y2_field.setType(QVariant.Double)
+            y2_field.setType(QMetaType.Type.Double)
             y2_field.setTypeName("double")
             y2_field.setLength(15)
             y2_field.setPrecision(6)
@@ -334,7 +334,7 @@ class PanelVertices(QDockWidget):
         
         id_field = QgsField()
         id_field.setName("ID_Poligono")
-        id_field.setType(QVariant.Int)
+        id_field.setType(QMetaType.Type.Int)
         fields.append(id_field)
         
         # Crear capa temporal de puntos con el mismo sistema de coordenadas que la original
@@ -368,7 +368,7 @@ class PanelVertices(QDockWidget):
                 self.iface.messageBar().pushMessage(
                     "Advertencia", 
                     "No se pudo aplicar la transformación de coordenadas. Se usarán las coordenadas del sistema de la capa.",
-                    level=Qgis.Warning,
+                    level=Qgis.MessageLevel.Warning,
                     duration=5
                 )
                 transform = None
@@ -387,7 +387,7 @@ class PanelVertices(QDockWidget):
                 self.iface.messageBar().pushMessage(
                     "Advertencia", 
                     f"No se pudo configurar la transformación a {extra_crs.authid()}. No se incluirán coordenadas adicionales.",
-                    level=Qgis.Warning,
+                    level=Qgis.MessageLevel.Warning,
                     duration=5
                 )
                 use_extra_coords = False
@@ -581,7 +581,7 @@ class PanelVertices(QDockWidget):
                 self.iface.messageBar().pushMessage(
                     "Error", 
                     f"No se pudo exportar a CSV: {str(e)}", 
-                    level=Qgis.Warning,
+                    level=Qgis.MessageLevel.Warning,
                     duration=5
                 )
         
@@ -598,7 +598,7 @@ class PanelVertices(QDockWidget):
         self.iface.messageBar().pushMessage(
             "Extracción Completada", 
             mensaje,
-            level=Qgis.Success,
+            level=Qgis.MessageLevel.Success,
             duration=5
         )
 

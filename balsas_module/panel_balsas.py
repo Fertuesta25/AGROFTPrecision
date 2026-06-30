@@ -1,11 +1,15 @@
 # balsas_module/panel_balsas.py
+"""
+Panel principal para el cálculo de volúmenes de balsas de riego
+(Compatible con QGIS 3.x/Qt5 y QGIS 4.x/Qt6)
+"""
 import os
 from qgis.PyQt.QtWidgets import (
     QDockWidget, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QDoubleSpinBox, QPushButton, QComboBox, QTextEdit,
-    QGroupBox, QCheckBox, QProgressBar, QMessageBox
+    QGroupBox, QCheckBox, QProgressBar, QMessageBox, QApplication
 )
-from qgis.PyQt.QtCore import Qt, QThread, pyqtSignal
+from qgis.PyQt.QtCore import Qt, QThread, pyqtSignal, QTimer
 from qgis.core import (
     QgsProject, QgsVectorLayer, QgsProcessingUtils,
     QgsProcessingContext, QgsProcessingFeedback, QgsWkbTypes,
@@ -200,6 +204,17 @@ class PanelBalsas(QDockWidget):
         self.label_geomembrana_comercial.setStyleSheet("font-weight: bold; color: #B8860B;")
         group_layout.addWidget(self.label_geomembrana_comercial)
         
+        # Botón para copiar el resumen al portapapeles
+        self.copiar_btn = QPushButton("Copiar resumen")
+        self.copiar_btn.setToolTip("Copiar parámetros y resultados al portapapeles")
+        self.copiar_btn.setStyleSheet(
+            "QPushButton { background: transparent; color: #2E8B57; "
+            "border: 1px solid #2E8B57; padding: 5px 10px; border-radius: 4px; font-size: 10px; }"
+            "QPushButton:hover { background: rgba(46,139,87,0.12); }"
+        )
+        group_layout.addWidget(self.copiar_btn)
+        self._last_results = {}
+        
         # Inicialmente oculto
         group.setVisible(False)
         self.summary_group = group
@@ -210,6 +225,7 @@ class PanelBalsas(QDockWidget):
         """Conecta las señales"""
         self.calculate_btn.clicked.connect(self.start_calculation)
         self.help_btn.clicked.connect(self.show_help)
+        self.copiar_btn.clicked.connect(self.copiar_resumen)
         self.update_layer_combo()
         
     def update_layer_combo(self):
@@ -434,6 +450,10 @@ class PanelBalsas(QDockWidget):
             vol_util = datos.get('volumen_util', 0)
             geom_neta = datos.get('geomembrana_neta', 0)
             geom_comercial = datos.get('geomembrana_comercial', 0)
+            self._last_results = {
+                'volumen_total': vol_total, 'volumen_util': vol_util,
+                'geomembrana_neta': geom_neta, 'geomembrana_comercial': geom_comercial,
+            }
             
             # Actualizar etiquetas
             self.label_volumen_total.setText(f"Volumen total: {vol_total:,.2f} m³ ({vol_total * 1000:,.0f} L)")
@@ -446,6 +466,36 @@ class PanelBalsas(QDockWidget):
             
         except Exception:
             pass
+
+    def copiar_resumen(self):
+        """Copia parámetros y resultados al portapapeles."""
+        r = getattr(self, '_last_results', {})
+        if not r:
+            return
+        vt = r.get('volumen_total', 0.0)
+        vu = r.get('volumen_util', 0.0)
+        gn = r.get('geomembrana_neta', 0.0)
+        gc = r.get('geomembrana_comercial', 0.0)
+        txt = (
+            "=== RESUMEN BALSA DE RIEGO ===\n\n"
+            "PARÁMETROS\n"
+            f"  Profundidad:       {self.profundidad_spin.value():.2f} m\n"
+            f"  Talud H / V:       {self.talud_h_spin.value():.2f} / {self.talud_v_spin.value():.2f}\n"
+            f"  Altura seguridad:  {self.altura_seg_spin.value():.2f} m\n"
+            f"  Piso muerto:       {self.piso_muerto_spin.value():.2f} m\n"
+            f"  Agarre lateral:    {self.agarre_spin.value():.2f} m\n"
+            f"  Pérdidas:          {self.perdidas_spin.value():.1f} %\n\n"
+            "VOLÚMENES\n"
+            f"  Volumen total:     {vt:,.2f} m³  ({vt*1000:,.0f} L)\n"
+            f"  Volumen útil:      {vu:,.2f} m³  ({vu*1000:,.0f} L)\n"
+            f"  Volumen muerto:    {vt - vu:,.2f} m³\n\n"
+            "GEOMEMBRANA\n"
+            f"  Área neta:         {gn:,.2f} m²\n"
+            f"  Área comercial:    {gc:,.2f} m²\n"
+        )
+        QApplication.clipboard().setText(txt)
+        self.copiar_btn.setText("¡Copiado!")
+        QTimer.singleShot(2000, lambda: self.copiar_btn.setText("Copiar resumen"))
 
     def show_help(self):
         """Muestra ayuda"""

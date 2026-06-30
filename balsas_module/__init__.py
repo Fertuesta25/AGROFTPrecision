@@ -2,6 +2,7 @@
 """
 Módulo de Balsas de Riego para AGROFT Precisión
 Versión 3.0 con soporte 3D
+(Compatible con QGIS 3.x/Qt5 y QGIS 4.x/Qt6)
 """
 
 def get_module_instance(iface):

@@ -137,10 +137,10 @@ class PanelPlantillas(QDockWidget):
                     respuesta = QMessageBox.question(
                         self, "Confirmar Reemplazo", 
                         f"Ya existe una plantilla con el nombre '{nombre_archivo}'. ¿Desea reemplazarla?",
-                        QMessageBox.Yes | QMessageBox.No
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
                     )
                     
-                    if respuesta == QMessageBox.No:
+                    if respuesta == QMessageBox.StandardButton.No:
                         return
                 
                 # Copiar el archivo
@@ -188,10 +188,10 @@ class PanelPlantillas(QDockWidget):
                 respuesta = QMessageBox.question(
                     self, "Confirmar Reemplazo", 
                     f"Ya existe un diseño llamado '{nombre_mapa}'. ¿Desea reemplazarlo?",
-                    QMessageBox.Yes | QMessageBox.No
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
                 )
                 
-                if respuesta == QMessageBox.Yes:
+                if respuesta == QMessageBox.StandardButton.Yes:
                     # Eliminar el diseño existente
                     layout_existente = layout_manager.layoutByName(nombre_mapa)
                     layout_manager.removeLayout(layout_existente)
@@ -282,7 +282,7 @@ class PanelPlantillas(QDockWidget):
                     mensaje = f"Mapa '{nombre_mapa}' creado correctamente."
                 
                 # Mostrar mensaje no modal para no bloquear la visualización del diseñador
-                msgBox = QMessageBox(QMessageBox.Information, "Éxito", mensaje, QMessageBox.Ok)
+                msgBox = QMessageBox(QMessageBox.Icon.Information, "Éxito", mensaje, QMessageBox.StandardButton.Ok)
                 msgBox.setModal(False)
                 msgBox.show()
                 

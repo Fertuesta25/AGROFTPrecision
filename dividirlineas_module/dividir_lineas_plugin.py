@@ -1,5 +1,8 @@
 # dividirlineas_module/dividir_lineas_plugin.py
-
+"""
+Plugin para dividir líneas con puntos
+(Compatible con QGIS 3.x/Qt5 y QGIS 4.x/Qt6)
+"""
 from qgis.PyQt.QtWidgets import QAction, QMessageBox
 from qgis.PyQt.QtGui import QIcon
 import os
@@ -13,6 +16,7 @@ class DividirLineasPlugin:
         
     def initGui(self):
         """Este método sería llamado si este fuera un plugin independiente"""
+        # Nota: Asegúrate de que esta ruta coincida con tu estructura física real (ej. .png o .svg)
         icon_path = os.path.join(self.plugin_dir, "resources/icons/dividirlineas_icon.svg")
         self.action = QAction(QIcon(icon_path), "Dividir Líneas con Puntos", self.iface.mainWindow())
         self.action.triggered.connect(self.run)
@@ -53,5 +57,7 @@ class DividirLineasPlugin:
             self.dialog.show()
             self.dialog.activateWindow()
             self.dialog.raise_()
+            
         except Exception as e:
-            QMessageBox.critical(None, "Error", f"No se pudo iniciar el módulo: {str(e)}")
+            QMessageBox.critical(self.iface.mainWindow(), "Error", 
+                               f"No se pudo abrir la herramienta de dividir líneas: {str(e)}")

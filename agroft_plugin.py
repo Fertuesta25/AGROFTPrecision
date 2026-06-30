@@ -15,6 +15,8 @@ from .vertices_module import get_module_instance as get_vertices_module  # Módu
 from .plantillas_module import get_module_instance as get_plantillas_module  # Nuevo módulo de plantillas
 from .altura_module.altura_dialog import AlturaDialog  # NUEVO: Módulo de alturas
 from .balsas_module import get_module_instance as get_balsas_module
+from .disenador_module import get_module_instance as get_disenador_module
+from .catch_module.catch_dialog import CatchDialog
 
 class AgroFTPrecisionPlugin:
     def __init__(self, iface):
@@ -34,6 +36,8 @@ class AgroFTPrecisionPlugin:
         self.vertices_module = None  # Módulo de vértices
         self.plantillas_module = None  # Nuevo módulo de plantillas
         self.balsas_module = None  # Nuevo módulo de balsas
+        self.disenador_module = None  # Módulo Diseñador de Plantación PRO
+        self.catch_dialog = None  # Módulo Uniformidad de Aspersión (Catch3D)
         self.actions = []
         
     def initGui(self):
@@ -88,14 +92,14 @@ class AgroFTPrecisionPlugin:
 
         # 6 y 7. Acciones para Divisor de Polígonos
         # Acción para Dividir en Áreas Iguales
-        icon_path = os.path.join(self.plugin_dir, "resources/icons/divisor_area_icon.png")
+        icon_path = os.path.join(self.plugin_dir, "resources/icons/divisor_area_icon.svg")
         divisor_area_action = QAction(QIcon(icon_path), "Dividir en Áreas Iguales", self.iface.mainWindow())
         divisor_area_action.triggered.connect(lambda: self.iniciar_divisor('area'))
         self.toolbar.addAction(divisor_area_action)
         self.actions.append(divisor_area_action)
 
         # Acción para Dividir en Partes Iguales
-        icon_path = os.path.join(self.plugin_dir, "resources/icons/divisor_partes_icon.png")
+        icon_path = os.path.join(self.plugin_dir, "resources/icons/divisor_partes_icon.svg")
         divisor_partes_action = QAction(QIcon(icon_path), "Dividir en Partes Iguales", self.iface.mainWindow())
         divisor_partes_action.triggered.connect(lambda: self.iniciar_divisor('conteo'))
         self.toolbar.addAction(divisor_partes_action)
@@ -142,6 +146,20 @@ class AgroFTPrecisionPlugin:
         balsas_action.triggered.connect(self.balsas_panel)
         self.toolbar.addAction(balsas_action)
         self.actions.append(balsas_action)
+        
+        # 14. NUEVA: Diseñador de Plantación PRO (Oil Palm)
+        icon_path = os.path.join(self.plugin_dir, "resources/icons/disenador_icon.svg")
+        disenador_action = QAction(QIcon(icon_path), "Diseñador de Plantación PRO", self.iface.mainWindow())
+        disenador_action.triggered.connect(self.disenador_panel)
+        self.toolbar.addAction(disenador_action)
+        self.actions.append(disenador_action)
+        
+        # 15. NUEVA: Uniformidad de Aspersión (Catch3D)
+        icon_path = os.path.join(self.plugin_dir, "resources/icons/catch_icon.svg")
+        catch_action = QAction(QIcon(icon_path), "Uniformidad de Aspersión", self.iface.mainWindow())
+        catch_action.triggered.connect(self.uniformidad_aspersion)
+        self.toolbar.addAction(catch_action)
+        self.actions.append(catch_action)
         
         # También añadir al menú de plugins
         for action in self.actions:
@@ -246,12 +264,29 @@ class AgroFTPrecisionPlugin:
                 self.balsas_module = None
         except Exception as e:
             print(f"Error al limpiar balsas_module: {str(e)}")
+        
+        try:
+            if self.disenador_module:
+                self.disenador_module.cleanup()
+                self.iface.removeDockWidget(self.disenador_module)
+                self.disenador_module.deleteLater()
+                self.disenador_module = None
+        except Exception as e:
+            print(f"Error al limpiar disenador_module: {str(e)}")
+        
+        try:
+            if self.catch_dialog:
+                self.catch_dialog.close()
+                self.catch_dialog.deleteLater()
+                self.catch_dialog = None
+        except Exception as e:
+            print(f"Error al limpiar catch_dialog: {str(e)}")
     
     def toggle_filter_dock(self):
         """Alterna la visibilidad del panel de filtrado"""
         if not self.filter_dock:
             self.filter_dock = FilterDock(self.iface)
-            self.iface.addDockWidget(Qt.RightDockWidgetArea, self.filter_dock)
+            self.iface.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.filter_dock)
         else:
             if self.filter_dock.isVisible():
                 self.filter_dock.hide()
@@ -286,7 +321,7 @@ class AgroFTPrecisionPlugin:
         if not self.panel_redriego:
             self.panel_redriego = PanelRedRiego(self.iface)
             # Acoplar el panel en el área derecha
-            self.iface.addDockWidget(Qt.RightDockWidgetArea, self.panel_redriego)
+            self.iface.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.panel_redriego)
         else:
             if self.panel_redriego.isVisible():
                 self.panel_redriego.hide()
@@ -339,7 +374,7 @@ class AgroFTPrecisionPlugin:
         if not self.plantillas_module:
             self.plantillas_module = get_plantillas_module(self.iface)
             # Acoplar el panel en el área derecha
-            self.iface.addDockWidget(Qt.RightDockWidgetArea, self.plantillas_module)
+            self.iface.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.plantillas_module)
         else:
             self.plantillas_module.toggle_panel()
 
@@ -348,7 +383,7 @@ class AgroFTPrecisionPlugin:
         try:
             # Crear y mostrar el diálogo de alturas
             self.altura_dialog = AlturaDialog(self.iface.mainWindow())
-            self.altura_dialog.exec_()
+            self.altura_dialog.exec()
         except Exception as e:
             from qgis.PyQt.QtWidgets import QMessageBox
             QMessageBox.critical(
@@ -362,10 +397,32 @@ class AgroFTPrecisionPlugin:
         if not self.balsas_module:
             self.balsas_module = get_balsas_module(self.iface)
             # Acoplar el panel en el área derecha
-            self.iface.addDockWidget(Qt.RightDockWidgetArea, self.balsas_module)
+            self.iface.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.balsas_module)
         else:
             if self.balsas_module.isVisible():
                 self.balsas_module.hide()
             else:
                 self.balsas_module.show_and_activate()
-    
+
+    def disenador_panel(self):
+        """Alterna la visibilidad del panel del Diseñador de Plantación PRO."""
+        if not self.disenador_module:
+            self.disenador_module = get_disenador_module(self.iface)
+            self.iface.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.disenador_module)
+        else:
+            self.disenador_module.setVisible(not self.disenador_module.isVisible())
+
+    def uniformidad_aspersion(self):
+        """Abre el diálogo de Uniformidad de Aspersión (Catch3D)."""
+        try:
+            if self.catch_dialog is None:
+                self.catch_dialog = CatchDialog(self.iface, self.iface.mainWindow())
+            self.catch_dialog.show()
+            self.catch_dialog.raise_()
+            self.catch_dialog.activateWindow()
+        except Exception as e:
+            from qgis.PyQt.QtWidgets import QMessageBox
+            QMessageBox.critical(
+                self.iface.mainWindow(), "Error",
+                f"Error abriendo Uniformidad de Aspersión: {str(e)}"
+            )

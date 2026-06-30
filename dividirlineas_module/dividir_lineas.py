@@ -1,7 +1,7 @@
 # dividirlineas_module/dividir_lineas.py
 
 from qgis.PyQt.QtWidgets import QDialog, QVBoxLayout, QComboBox, QLabel, QPushButton, QMessageBox, QDoubleSpinBox, QHBoxLayout, QCheckBox
-from qgis.PyQt.QtCore import Qt, QVariant, QTimer
+from qgis.PyQt.QtCore import Qt, QVariant, QTimer, QMetaType
 from qgis.core import (QgsProject, QgsFeature, QgsGeometry, QgsField,
                      QgsVectorLayer, QgsFeatureRequest, QgsPointXY,
                      QgsProcessingFeatureSourceDefinition, QgsWkbTypes,
@@ -506,7 +506,7 @@ class DividirLineasDialog(QDialog):
         
         # Usar el método del proveedor para agregar el campo (forma más compatible)
         provider = result_layer.dataProvider()
-        provider.addAttributes([QgsField("segment_id", 2)])  # 2 corresponde a Int en QVariant
+        provider.addAttributes([QgsField("segment_id", QMetaType.Type.Int)])  # 2 corresponde a Int en QVariant
         result_layer.updateFields()
         
         return result_layer

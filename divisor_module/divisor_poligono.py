@@ -20,7 +20,7 @@ class HerramientaDibujoLinea(QgsMapToolEmitPoint):
         self.callback = callback
         self.puntos = []
         self.banda_elastica = QgsRubberBand(lienzo, QgsWkbTypes.LineGeometry)
-        self.banda_elastica.setColor(Qt.red)
+        self.banda_elastica.setColor(Qt.GlobalColor.red)
         self.banda_elastica.setWidth(2)
         
         self.utilidades_ajuste = lienzo.snappingUtils()
@@ -193,7 +193,7 @@ class DivisorPoligono:
         herramienta = HerramientaDibujoLinea(self.lienzo, callback)
         self.lienzo.setMapTool(herramienta)
         herramienta.deactivated.connect(bucle.quit)
-        bucle.exec_()
+        bucle.exec()
 
     def obtener_punto_clic(self):
         bucle = QEventLoop()
@@ -203,7 +203,7 @@ class DivisorPoligono:
         herramienta = HerramientaSeleccionPunto(self.lienzo, callback)
         self.lienzo.setMapTool(herramienta)
         herramienta.deactivated.connect(bucle.quit)
-        bucle.exec_()
+        bucle.exec()
 
     def dividir_poligono(self):
         capa = self.iface.activeLayer()
@@ -269,12 +269,12 @@ class DivisorPoligono:
             partes_estimadas = math.ceil(area_original / entrada_area_esperada)
             if partes_estimadas > 1000:
                 msg = QMessageBox(
-                    QMessageBox.Warning,
+                    QMessageBox.Icon.Warning,
                     "Alto Número de Particiones",
                     f"Estimadas {partes_estimadas} partes. Esto puede causar problemas de rendimiento.\n¿Continuar?",
-                    QMessageBox.Yes | QMessageBox.No
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
                 )
-                if msg.exec_() == QMessageBox.No:
+                if msg.exec() == QMessageBox.StandardButton.No:
                     self.iface.messageBar().pushInfo("Cancelado", "Operación abortada por el usuario")
                     return
             if da.willUseEllipsoid():
@@ -282,7 +282,7 @@ class DivisorPoligono:
             else:
                 area_esperada = QgsUnitTypes.fromUnitToUnitFactor(unidad_proyecto, unidad_area_crs) * entrada_area_esperada
             num_partes = None
-        else:
+        else:  # modo conteo
             max_partes = max(2, min(1000, int(area_original / 0.1)))
             unidad_proyecto = QgsProject.instance().areaUnits()
             abrev_unidad = QgsUnitTypes.toAbbreviatedString(unidad_proyecto)
@@ -312,30 +312,30 @@ class DivisorPoligono:
             punto_a = transformacion.transform(punto_a)
             punto_b = transformacion.transform(punto_b)
         
-        # Modo área: ajustar basado en el punto cliqueado
-        if self.modo == "area":
-            self.obtener_punto_clic()
-            if not self.punto_clic:
-                raise Exception("¡No se seleccionó ningún punto!")
-            punto_cliqueado = self.punto_clic
-            if self.lienzo.mapSettings().destinationCrs() != capa.crs():
-                punto_cliqueado = transformacion.transform(punto_cliqueado)
-            if not geom_original.intersects(QgsGeometry.fromPointXY(punto_cliqueado)):
-                raise Exception("¡El punto cliqueado no está en el polígono!")
-            centro = QgsPointXY((punto_a.x() + punto_b.x())/2, (punto_a.y() + punto_b.y())/2)
-            dx = punto_b.x() - punto_a.x()
-            dy = punto_b.y() - punto_a.y()
-            angulo_rad = math.atan2(dy, dx)
-            angulo_deg = math.degrees(angulo_rad)
-            geom_cliqueada = QgsGeometry.fromPointXY(punto_cliqueado)
-            geom_cliqueada.rotate(angulo_deg, centro)
-            cliqueado_rotado = geom_cliqueada.asPoint()
-            original_rotado = QgsGeometry(geom_original)
-            original_rotado.rotate(angulo_deg, centro)
-            bbox = original_rotado.boundingBox()
-            medio_y = (bbox.yMinimum() + bbox.yMaximum()) / 2
-            if cliqueado_rotado.y() > medio_y:
-                punto_a, punto_b = punto_b, punto_a
+        # Permitir elegir lado inicial tanto para modo área como para modo conteo
+        self.obtener_punto_clic()
+        if not self.punto_clic:
+            raise Exception("¡No se seleccionó ningún punto!")
+        punto_cliqueado = self.punto_clic
+        if self.lienzo.mapSettings().destinationCrs() != capa.crs():
+            punto_cliqueado = transformacion.transform(punto_cliqueado)
+        if not geom_original.intersects(QgsGeometry.fromPointXY(punto_cliqueado)):
+            raise Exception("¡El punto cliqueado no está en el polígono!")
+        
+        centro = QgsPointXY((punto_a.x() + punto_b.x())/2, (punto_a.y() + punto_b.y())/2)
+        dx = punto_b.x() - punto_a.x()
+        dy = punto_b.y() - punto_a.y()
+        angulo_rad = math.atan2(dy, dx)
+        angulo_deg = math.degrees(angulo_rad)
+        geom_cliqueada = QgsGeometry.fromPointXY(punto_cliqueado)
+        geom_cliqueada.rotate(angulo_deg, centro)
+        cliqueado_rotado = geom_cliqueada.asPoint()
+        original_rotado = QgsGeometry(geom_original)
+        original_rotado.rotate(angulo_deg, centro)
+        bbox = original_rotado.boundingBox()
+        medio_y = (bbox.yMinimum() + bbox.yMaximum()) / 2
+        if cliqueado_rotado.y() > medio_y:
+            punto_a, punto_b = punto_b, punto_a
 
         centro = QgsPointXY((punto_a.x() + punto_b.x())/2, (punto_a.y() + punto_b.y())/2)
         dx = punto_b.x() - punto_a.x()
@@ -433,7 +433,7 @@ class DivisorPoligono:
         configuracion_etiqueta.fieldName = f"concat(round($area, 2), ' {abrev_unidad}')"
         formato_texto = QgsTextFormat()
         formato_texto.setSize(15)
-        formato_texto.setColor(Qt.red)
+        formato_texto.setColor(Qt.GlobalColor.red)
         configuracion_etiqueta.setFormat(formato_texto)
         capa_salida.setLabeling(QgsVectorLayerSimpleLabeling(configuracion_etiqueta))
         capa_salida.setLabelsEnabled(True)

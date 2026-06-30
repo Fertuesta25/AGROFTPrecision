@@ -7,7 +7,7 @@ Incluye campos para Sector y caudal (Qe), y opcionalmente crea áreas de asperso
 
 import os
 from qgis.PyQt.QtCore import (
-    QSettings, QTranslator, QCoreApplication, Qt, QVariant
+    QSettings, QTranslator, QCoreApplication, Qt, QVariant, QMetaType
 )
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import (
@@ -58,7 +58,7 @@ class PuntosLineaModule:
         """Alterna la visibilidad del panel de puntos"""
         if not self.panel:
             self.panel = PuntosLineaPanel(self.iface)
-            self.iface.addDockWidget(Qt.RightDockWidgetArea, self.panel)
+            self.iface.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.panel)
             self.panel.show()  # Asegurarse de que se muestre
             self.panel.raise_()  # Traer al frente
             self.panel.activateWindow()  # Activar la ventana
@@ -92,7 +92,7 @@ class PuntosLineaPanel(QDockWidget):
         super(PuntosLineaPanel, self).__init__("Generar Puntos en Línea", iface.mainWindow())
         self.iface = iface
         self.plugin_dir = os.path.dirname(__file__)
-        self.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        self.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea)
         
         # Crear el widget contenedor
         self.dock_widget = QWidget()
@@ -197,7 +197,7 @@ class PuntosLineaPanel(QDockWidget):
         row += 1
         
         # Añadir un espaciador fijo para separar el GroupBox del botón
-        fixed_spacer = QSpacerItem(20, 10, QSizePolicy.Minimum, QSizePolicy.Fixed)
+        fixed_spacer = QSpacerItem(20, 10, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
         main_layout.addItem(fixed_spacer, row, 0)
         row += 1
         
@@ -209,7 +209,7 @@ class PuntosLineaPanel(QDockWidget):
         row += 1
         
         # Agregar un espaciador elástico al final
-        spacer_item = QSpacerItem(20, 0, QSizePolicy.Minimum, QSizePolicy.Expanding)
+        spacer_item = QSpacerItem(20, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
         main_layout.addItem(spacer_item, row, 0)
         
         # Configurar el layout en el widget
@@ -272,7 +272,7 @@ class PuntosLineaPanel(QDockWidget):
             QgsMessageLog.logMessage(
                 f"Archivo de estilo no encontrado: {style_path}", 
                 "Puntos en Línea", 
-                Qgis.Warning
+                Qgis.MessageLevel.Warning
             )
     
     def generate_points(self):
@@ -313,8 +313,8 @@ class PuntosLineaPanel(QDockWidget):
         
         # 5. Añadir campos a la capa de salida
         output_provider.addAttributes([
-            QgsField("Sector", QVariant.Int),
-            QgsField("Qe", QVariant.Double)
+            QgsField("Sector", QMetaType.Type.Int),
+            QgsField("Qe", QMetaType.Type.Double)
         ])
         output_layer.updateFields()
         
@@ -357,7 +357,7 @@ class PuntosLineaPanel(QDockWidget):
         
         # 11. Mostrar mensaje de éxito
         self.iface.messageBar().pushMessage(
-            "Éxito", f"Se generaron {len(features)} puntos a lo largo de las líneas.", level=0, duration=3
+            "Éxito", f"Se generaron {len(features)} puntos a lo largo de las líneas.", level=Qgis.MessageLevel.Info, duration=3
         )
     
     def generate_buffer_layer(self, source_layer, radius):
@@ -396,7 +396,7 @@ class PuntosLineaPanel(QDockWidget):
         
         # Mensaje de éxito
         self.iface.messageBar().pushMessage(
-            "Éxito", f"Se generó la capa de área de aspersores con radio {radius}.", level=0, duration=3
+            "Éxito", f"Se generó la capa de área de aspersores con radio {radius}.", level=Qgis.MessageLevel.Info, duration=3
         )
         
         # Retornar la capa para poder aplicarle estilos

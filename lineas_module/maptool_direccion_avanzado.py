@@ -3,8 +3,8 @@ from qgis.core import (
     QgsGeometry, QgsWkbTypes, QgsPointXY, QgsProject, 
     QgsSnappingConfig, QgsTolerance, QgsPoint
 )
-from PyQt5.QtGui import QColor
-from PyQt5.QtCore import Qt
+from qgis.PyQt.QtGui import QColor
+from qgis.PyQt.QtCore import Qt
 
 class MapToolDireccionAvanzado(QgsMapTool):
     def __init__(self, iface, panel_ref):
@@ -23,7 +23,7 @@ class MapToolDireccionAvanzado(QgsMapTool):
         self.temp_rb = QgsRubberBand(self.canvas, QgsWkbTypes.LineGeometry)
         self.temp_rb.setColor(QColor(255, 0, 0, 128))  # Semitransparente
         self.temp_rb.setWidth(1)
-        self.temp_rb.setLineStyle(Qt.DashLine)
+        self.temp_rb.setLineStyle(Qt.PenStyle.DashLine)
         
         # Marcador para mostrar punto potencial de snap durante el movimiento
         self.snap_marker = QgsRubberBand(self.canvas, QgsWkbTypes.PointGeometry)
@@ -47,6 +47,8 @@ class MapToolDireccionAvanzado(QgsMapTool):
         QgsProject.instance().setSnappingConfig(snapping_config)
 
     def deactivate(self):
+        # Limpiar el tooltip del lienzo para que no se filtre a otras herramientas
+        self.canvas.setToolTip("")
         self.reset()
         self.snap_marker.reset(QgsWkbTypes.PointGeometry)
         super().deactivate()
@@ -77,7 +79,7 @@ class MapToolDireccionAvanzado(QgsMapTool):
 
     def canvasReleaseEvent(self, event):
         # Solo procesar clics con el botón izquierdo
-        if event.button() != Qt.LeftButton:
+        if event.button() != Qt.MouseButton.LeftButton:
             return
             
         # Obtener punto con snapping
@@ -131,7 +133,7 @@ class MapToolDireccionAvanzado(QgsMapTool):
 
     def keyPressEvent(self, event):
         # Cancelar operación con tecla Escape
-        if event.key() == Qt.Key_Escape:
+        if event.key() == Qt.Key.Key_Escape:
             self.reset()
             self.snap_marker.reset(QgsWkbTypes.PointGeometry)
             self.canvas.unsetMapTool(self)

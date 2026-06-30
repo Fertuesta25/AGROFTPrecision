@@ -24,7 +24,7 @@ class LineasDesdeBasePanel(QDockWidget):
         self.plugin_dir = os.path.dirname(os.path.dirname(__file__))  # Directorio del plugin
 
         # Configurar el dock para siempre aparecer a la derecha
-        self.setAllowedAreas(Qt.RightDockWidgetArea)
+        self.setAllowedAreas(Qt.DockWidgetArea.RightDockWidgetArea)
         
         # Crear layout principal con márgenes reducidos
         layout = QVBoxLayout()
@@ -98,17 +98,17 @@ class LineasDesdeBasePanel(QDockWidget):
 
         self.label_base = QLabel("Seleccionar línea base:")
         self.combo_base = QComboBox()
-        self.combo_base.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.combo_base.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         
         # Añadir checkbox para usar solo entidades seleccionadas
         self.check_seleccionadas = QCheckBox("Usar solo entidades seleccionadas")
         self.check_seleccionadas.setChecked(False)
-        self.check_seleccionadas.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        self.check_seleccionadas.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
 
         # NUEVA FUNCIONALIDAD: Agregar selección de capa de polígonos
         self.label_poligono = QLabel("Capa de polígonos (opcional):")
         self.combo_poligono = QComboBox()
-        self.combo_poligono.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.combo_poligono.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         
         # Agregar opción "Ninguna" al principio
         self.combo_poligono.addItem("Ninguna", None)
@@ -116,37 +116,37 @@ class LineasDesdeBasePanel(QDockWidget):
         # Checkbox para extender líneas hasta el borde del polígono
         self.check_extender = QCheckBox("Extender líneas hasta el borde del polígono")
         self.check_extender.setChecked(False)
-        self.check_extender.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        self.check_extender.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         
         self.btn_dibujar = QPushButton("📐 Dibujar dirección")
-        self.btn_dibujar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.btn_dibujar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.btn_dibujar.clicked.connect(self.activar_dibujo)
 
         self.label_espaciado = QLabel("Espaciado (m):")
         self.spin_espaciado = QDoubleSpinBox()
         self.spin_espaciado.setRange(0.01, 1000)
         self.spin_espaciado.setValue(5.0)
-        self.spin_espaciado.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.spin_espaciado.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         self.label_longitud = QLabel("Longitud (m):")
         self.spin_longitud = QDoubleSpinBox()
         self.spin_longitud.setRange(0.01, 1000)
         self.spin_longitud.setValue(20.0)
-        self.spin_longitud.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.spin_longitud.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         self.label_offset = QLabel("Offset inicial (m):")
         self.spin_offset = QDoubleSpinBox()
         self.spin_offset.setRange(0.0, 1000)
         self.spin_offset.setValue(1.0)
-        self.spin_offset.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.spin_offset.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         self.label_lado = QLabel("Lado:")
         self.combo_lado = QComboBox()
         self.combo_lado.addItems(["Derecha", "Izquierda", "Ambos lados"])
-        self.combo_lado.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.combo_lado.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         self.btn_generar = QPushButton("🛠 Generar líneas")
-        self.btn_generar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.btn_generar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.btn_generar.clicked.connect(self.generar_lineas)
 
         # Conectar el evento de cambio del checkbox de extender
@@ -166,17 +166,17 @@ class LineasDesdeBasePanel(QDockWidget):
             layout.addWidget(w)
         
         # Añadir un espaciador que absorba todo el espacio extra
-        layout.addSpacerItem(QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
+        layout.addSpacerItem(QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
 
         # Configurar el widget contenedor para que se ajuste al tamaño preferido
         self.widget.setLayout(layout)
-        self.widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+        self.widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         
         # Añadir el panel al dock de QGIS en la parte derecha
-        iface.addDockWidget(Qt.RightDockWidgetArea, self)
+        iface.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self)
         
         # Hacer que el panel ocupe todo el espacio disponible
-        self.setFeatures(QDockWidget.DockWidgetFloatable | QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetClosable)
+        self.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetFloatable | QDockWidget.DockWidgetFeature.DockWidgetMovable | QDockWidget.DockWidgetFeature.DockWidgetClosable)
         
         self.load_line_layers()
         self.load_polygon_layers()  # NUEVA FUNCIÓN
@@ -195,9 +195,9 @@ class LineasDesdeBasePanel(QDockWidget):
         Actualiza el valor de longitud cuando se marca/desmarca la opción de extender hasta polígono
         
         Args:
-            state: Estado del checkbox (Qt.Checked o Qt.Unchecked)
+            state: Estado del checkbox (Qt.CheckState.Checked o Qt.CheckState.Unchecked)
         """
-        if state == Qt.Checked:
+        if state == Qt.CheckState.Checked:
             # Si se marca la opción de extender, fijar longitud a 1 metro y deshabilitar
             self.spin_longitud.setValue(1.0)
             self.spin_longitud.setEnabled(False)
@@ -245,7 +245,7 @@ class LineasDesdeBasePanel(QDockWidget):
             self.iface.messageBar().pushMessage(
                 "Selección", 
                 f"Seleccionando objetos espaciales en la capa {active_layer.name()}", 
-                Qgis.Info, 
+                Qgis.MessageLevel.Info, 
                 3  # Duración en segundos
             )
 
@@ -273,7 +273,7 @@ class LineasDesdeBasePanel(QDockWidget):
             self.iface.messageBar().pushMessage(
                 "Selección", 
                 f"Se han seleccionado {active_layer.selectedFeatureCount()} objetos en la capa {active_layer.name()}", 
-                Qgis.Success, 
+                Qgis.MessageLevel.Success, 
                 3  # Duración en segundos
             )
             
@@ -311,7 +311,7 @@ class LineasDesdeBasePanel(QDockWidget):
             self.iface.messageBar().pushMessage(
                 "Deselección", 
                 f"Se han deseleccionado {num_selected} objetos en la capa {active_layer.name()}", 
-                Qgis.Success, 
+                Qgis.MessageLevel.Success, 
                 3  # Duración en segundos
             )
             
@@ -391,7 +391,7 @@ class LineasDesdeBasePanel(QDockWidget):
         self.iface.messageBar().pushMessage(
             "Dibujo de dirección", 
             "Dibuje una línea para definir la dirección de las líneas a generar", 
-            Qgis.Info, 
+            Qgis.MessageLevel.Info, 
             5  # Duración en segundos
         )
 
@@ -401,7 +401,7 @@ class LineasDesdeBasePanel(QDockWidget):
         self.iface.messageBar().pushMessage(
             "Línea capturada", 
             "Dirección definida correctamente", 
-            Qgis.Success, 
+            Qgis.MessageLevel.Success, 
             3  # Duración en segundos
         )
 
@@ -461,7 +461,7 @@ class LineasDesdeBasePanel(QDockWidget):
             self.iface.messageBar().pushMessage(
                 "Generando líneas", 
                 "Procesando...", 
-                Qgis.Info
+                Qgis.MessageLevel.Info
             )
             
             # Procesar eventos para que se muestre el mensaje
@@ -495,7 +495,7 @@ class LineasDesdeBasePanel(QDockWidget):
                 self.iface.messageBar().pushMessage(
                     "Éxito", 
                     f"Se han generado {self.result_layer.featureCount()} líneas.", 
-                    Qgis.Success, 
+                    Qgis.MessageLevel.Success, 
                     5  # Duración en segundos
                 )
             else:
@@ -676,7 +676,7 @@ class LineasDesdeBasePanel(QDockWidget):
             self.iface.messageBar().pushMessage(
                 "Copiando líneas", 
                 "Procesando...", 
-                Qgis.Info
+                Qgis.MessageLevel.Info
             )
             
             # Procesar eventos para que se muestre el mensaje
@@ -736,7 +736,7 @@ class LineasDesdeBasePanel(QDockWidget):
             self.iface.messageBar().pushMessage(
                 "Éxito", 
                 f"Se han copiado {features_added} líneas a la capa 'Red de riego' como laterales DN 16 y se ha eliminado la capa temporal.", 
-                Qgis.Success, 
+                Qgis.MessageLevel.Success, 
                 5  # Duración en segundos
             )
             

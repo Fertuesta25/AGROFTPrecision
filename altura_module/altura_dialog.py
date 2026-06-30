@@ -2,13 +2,13 @@
 Diálogo para la herramienta de extracción de alturas con carga automática
 """
 import os
-from PyQt5.QtWidgets import (
+from qgis.PyQt.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QLineEdit, QTextEdit, QProgressBar, QGroupBox,
     QFileDialog, QCheckBox, QMessageBox, QFormLayout, QRadioButton,
     QButtonGroup
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from qgis.PyQt.QtCore import Qt, QThread, pyqtSignal
 from qgis.core import QgsProject, QgsVectorLayer, QgsRasterLayer, QgsWkbTypes
 from qgis.gui import QgsFileWidget
 
@@ -278,7 +278,7 @@ class AlturaDialog(QDialog):
     
     def toggle_archivo_salida(self, estado):
         """Habilita/deshabilita el selector de archivo de salida"""
-        self.widget_archivo_salida.setEnabled(estado == Qt.Checked)
+        self.widget_archivo_salida.setEnabled(estado == Qt.CheckState.Checked if hasattr(Qt, 'CheckState') else estado == Qt.CheckState.Checked)
     
     def verificar_datos(self):
         """Verifica compatibilidad entre capas seleccionadas"""
@@ -430,9 +430,9 @@ class AlturaDialog(QDialog):
                     f"¿Está seguro de agregar los campos de altura a la capa '{capa_lineas.name()}'?\n\n"
                     "Esta acción modificará permanentemente la capa original.\n"
                     "Se recomienda hacer una copia de seguridad antes de continuar.",
-                    QMessageBox.Yes | QMessageBox.No
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
                 )
-                if respuesta != QMessageBox.Yes:
+                if respuesta != QMessageBox.StandardButton.Yes:
                     return
             
             # Configurar extractor
@@ -597,9 +597,9 @@ class AlturaDialog(QDialog):
             respuesta = QMessageBox.question(
                 self, "Procesamiento en curso",
                 "¿Está seguro de cerrar? El procesamiento se cancelará.",
-                QMessageBox.Yes | QMessageBox.No
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
-            if respuesta == QMessageBox.Yes:
+            if respuesta == QMessageBox.StandardButton.Yes:
                 self.thread_procesamiento.terminate()
                 self.thread_procesamiento.wait()
                 event.accept()

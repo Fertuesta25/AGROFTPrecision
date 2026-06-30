@@ -3,7 +3,7 @@ from qgis.core import (
     QgsWkbTypes, QgsVectorLayer, QgsProject, QgsFeatureRequest, 
     QgsCoordinateTransform, QgsCoordinateReferenceSystem, QgsFeedback
 )
-from PyQt5.QtCore import QVariant, QMetaType
+from qgis.PyQt.QtCore import QVariant, QMetaType
 import math
 
 def generar_lineas(base_layer, direccion_geom, espaciado, longitud, offset, lado, context=None, usar_seleccion=False):
@@ -34,8 +34,8 @@ def generar_lineas(base_layer, direccion_geom, espaciado, longitud, offset, lado
     # Crear estructura para la capa resultante
     results = []
     fields = QgsFields()
-    fields.append(QgsField("id", QMetaType.Int))
-    fields.append(QgsField("linea_base_id", QMetaType.Int))  # ID de la entidad base
+    fields.append(QgsField("id", QMetaType.Type.Int))
+    fields.append(QgsField("linea_base_id", QMetaType.Type.Int))  # ID de la entidad base
 
     # Procesar la línea de dirección
     line = direccion_geom.asPolyline()

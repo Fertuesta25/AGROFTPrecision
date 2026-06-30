@@ -1,5 +1,5 @@
 """
-Módulo para extraer alturas desde DEM para líneas de red de riego - Versión mejorada v2
+Módulo para extraer alturas desde DEM para líneas de red de riego - Versión compatible con Qt6/QGIS 4
 """
 import os
 from qgis.core import (
@@ -8,8 +8,9 @@ from qgis.core import (
     QgsProcessingException, QgsRasterBandStats, QgsCoordinateReferenceSystem,
     QgsCoordinateTransform, QgsRasterDataProvider
 )
-from qgis.PyQt.QtCore import QVariant
-from PyQt5.QtWidgets import QMessageBox
+# Usar SIEMPRE la capa de compatibilidad qgis.PyQt en lugar de PyQt5/PyQt6 directamente
+from qgis.PyQt.QtCore import QVariant, QMetaType
+from qgis.PyQt.QtWidgets import QMessageBox
 import processing
 
 
@@ -213,13 +214,13 @@ class AlturaExtractor:
             nuevos_campos = []
             for campo in campos_faltantes:
                 if campo == "altura_inicial":
-                    nuevos_campos.append(QgsField("altura_inicial", QVariant.Double, "double", 10, 2))
+                    nuevos_campos.append(QgsField("altura_inicial", QMetaType.Type.Double, "double", 10, 2))
                 elif campo == "altura_final":
-                    nuevos_campos.append(QgsField("altura_final", QVariant.Double, "double", 10, 2))
+                    nuevos_campos.append(QgsField("altura_final", QMetaType.Type.Double, "double", 10, 2))
                 elif campo == "diferencia_altura":
-                    nuevos_campos.append(QgsField("diferencia_altura", QVariant.Double, "double", 10, 2))
+                    nuevos_campos.append(QgsField("diferencia_altura", QMetaType.Type.Double, "double", 10, 2))
                 elif campo == "pendiente_pct":
-                    nuevos_campos.append(QgsField("pendiente_pct", QVariant.Double, "double", 10, 4))
+                    nuevos_campos.append(QgsField("pendiente_pct", QMetaType.Type.Double, "double", 10, 4))
             
             # Agregar campos a la capa
             provider = self.line_layer.dataProvider()
@@ -242,10 +243,10 @@ class AlturaExtractor:
             nuevos_campos = QgsFields(campos_originales)
             
             # Agregar nuevos campos para alturas (sin longitud_m)
-            nuevos_campos.append(QgsField("altura_inicial", QVariant.Double, "double", 10, 2))
-            nuevos_campos.append(QgsField("altura_final", QVariant.Double, "double", 10, 2))
-            nuevos_campos.append(QgsField("diferencia_altura", QVariant.Double, "double", 10, 2))
-            nuevos_campos.append(QgsField("pendiente_pct", QVariant.Double, "double", 10, 4))
+            nuevos_campos.append(QgsField("altura_inicial", QMetaType.Type.Double, "double", 10, 2))
+            nuevos_campos.append(QgsField("altura_final", QMetaType.Type.Double, "double", 10, 2))
+            nuevos_campos.append(QgsField("diferencia_altura", QMetaType.Type.Double, "double", 10, 2))
+            nuevos_campos.append(QgsField("pendiente_pct", QMetaType.Type.Double, "double", 10, 4))
             
             # Crear capa temporal en memoria
             crs = self.line_layer.crs().authid()

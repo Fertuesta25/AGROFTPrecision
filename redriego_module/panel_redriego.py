@@ -4,9 +4,9 @@ from qgis.PyQt.QtWidgets import (
     QCheckBox, QGridLayout, QSizePolicy, QDialog, QToolTip, QDockWidget, QSlider, QHBoxLayout, QToolButton, QSpacerItem,
     QGroupBox, QTextEdit  # Añade estas dos clases
 )
-from qgis.PyQt.QtGui import QColor, QPainter, QFontMetrics, QRegExpValidator, QIntValidator, QCursor
+from qgis.PyQt.QtGui import QColor, QPainter, QFontMetrics, QRegularExpressionValidator, QIntValidator, QCursor
 from qgis.PyQt.QtCore import (
-    Qt, pyqtSignal, QPoint, QRect, QRegExp
+    Qt, pyqtSignal, QPoint, QRect, QRegularExpression, QVariant, QMetaType
 )
 from qgis.gui import (
     QgsProjectionSelectionWidget, 
@@ -37,7 +37,6 @@ from qgis.core import (
 
 from qgis.PyQt.QtGui import QIcon
 from qgis.utils import iface
-from PyQt5.QtCore import QVariant
 import os
 import math
 from collections import defaultdict  # Para agrupar las tuberías por diámetro
@@ -51,13 +50,13 @@ class FloatingLengthInput(QWidget):
         super().__init__(canvas)  # Pasamos el canvas como padre para asegurar visibilidad correcta
         
         # Configuración básica del widget
-        self.setFixedSize(80, 30)
+        self.setFixedSize(96, 48)
         
         # Crear campo de texto
         self.edit = QLineEdit(self)
-        self.edit.setGeometry(0, 0, 80, 30)
-        self.edit.setAlignment(Qt.AlignCenter)
-        self.edit.setValidator(QRegExpValidator(QRegExp("\\d+(\\.\\d+)?")))
+        self.edit.setGeometry(0, 0, 96, 28)
+        self.edit.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.edit.setValidator(QRegularExpressionValidator(QRegularExpression("\\d+(\\.\\d+)?")))
         self.edit.setText(str(initial_value))
         self.edit.returnPressed.connect(self.on_value_entered)
         
@@ -73,16 +72,36 @@ class FloatingLengthInput(QWidget):
                 font-size: 9pt;
             }
         """)
+
+        # Etiqueta de azimut/ángulo (debajo del campo)
+        self.angle_label = QLabel("", self)
+        self.angle_label.setGeometry(0, 29, 96, 17)
+        self.angle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.angle_label.setStyleSheet("""
+            QLabel {
+                background-color: rgba(40, 40, 40, 160);
+                border-radius: 4px;
+                color: white;
+                font-size: 8pt;
+            }
+        """)
         
         # Asegurarnos de que el widget sea visible por encima de otros elementos
-        self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint | Qt.Tool)
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setFocusPolicy(Qt.NoFocus)  # No queremos que el widget principal tome el foco
+        self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # No queremos que el widget principal tome el foco
         
     def update_value(self, value):
         """Actualiza el valor mostrado sin emitir señal"""
         if not self.edit.hasFocus():
             self.edit.setText(f"{value:.1f}")
+
+    def set_angle(self, deg, ortho=False):
+        """Muestra el azimut actual; añade un aviso cuando el ángulo está bloqueado."""
+        txt = f"∠ {deg:.0f}°"
+        if ortho:
+            txt += "  ⊾ orto"
+        self.angle_label.setText(txt)
     
     def on_value_entered(self):
         """Emite la señal cuando se introduce un nuevo valor"""
@@ -100,254 +119,283 @@ class FloatingLengthInput(QWidget):
 
 # Definición de la herramienta de dibujo integrada directamente en este archivo
 class LineDrawingTool(QgsMapToolEmitPoint):
-    """Herramienta personalizada para dibujar líneas con longitud específica"""
-    lineCaptured = pyqtSignal(object, float)  # Geometría, longitud
-    
+    """Herramienta para dibujar líneas de longitud específica.
+
+    Mejoras:
+      - Geodesia correcta en CRS geográfico (computeSpheroidProject); la previa
+        y la línea final coinciden siempre.
+      - Transformación capa<->mapa correcta cuando el CRS de capa != proyecto.
+      - Bloqueo de ángulo: mantener Shift fija el azimut a múltiplos de 45°
+        (ortogonal/diagonal), ideal para rejillas de riego.
+      - Clic derecho termina la cadena continua; Ctrl+Z deshace el último tramo.
+      - Previa ligera (sin refrescar todas las capas).
+      - Un único cálculo del punto final reutilizado por previa, clic y Enter.
+    """
+    lineCaptured = pyqtSignal(object, float)   # Geometría, longitud
+    undoLastRequested = pyqtSignal()           # Deshacer último tramo
+
+    ANGLE_STEP = math.radians(45)              # paso del bloqueo de ángulo
+
     def __init__(self, canvas, initial_length, layer_crs):
         super().__init__(canvas)
         self.canvas = canvas
         self.target_length = initial_length
         self.layer_crs = layer_crs
         self.project_crs = canvas.mapSettings().destinationCrs()
-        
-        # Añadir esta línea para controlar la entrada numérica directa
+
         self.is_numeric_input_started = False
-
-        # Añadir esta línea para guardar el último punto dibujado
-        self.last_end_point = None  # El último punto final dibujado
-        self.continuous_mode = True  # Modo continuo activado por defecto
-
-        # Almacenar la última posición del ratón
+        self.last_end_point = None          # último punto final (coords de capa)
+        self.continuous_mode = True
         self.last_mouse_pos = None
-        
-        # Configurar la herramienta flotante de entrada
+        self.last_map_point = None          # último punto del ratón (coords de mapa)
+        self.constrain_angle = False        # Shift -> ortogonal/45°
         self.floating_input = None
-        
-        # Configurar snapping
+
+        # Snapping
         self.snapping_utils = QgsMapCanvasSnappingUtils(canvas)
         self.snapping_utils.setConfig(QgsProject.instance().snappingConfig())
         self.snap_indicator = QgsSnapIndicator(canvas)
-        
-        # Configurar el transformador de coordenadas si es necesario
+
+        # Transformaciones proyecto<->capa (en ambos sentidos)
         self.need_transform = (self.layer_crs.srsid() != self.project_crs.srsid())
         if self.need_transform:
             self.transform = QgsCoordinateTransform(
-                self.project_crs, 
-                self.layer_crs, 
-                QgsProject.instance()
-            )
-        
-        # Configurar las bandas de goma (rubber bands) para visualización
+                self.project_crs, self.layer_crs, QgsProject.instance())
+            self.transform_to_map = QgsCoordinateTransform(
+                self.layer_crs, self.project_crs, QgsProject.instance())
+
+        # Bandas de goma
         self.rubber_band = QgsRubberBand(canvas, QgsWkbTypes.LineGeometry)
         self.rubber_band.setColor(QColor(0, 0, 255, 100))
         self.rubber_band.setWidth(2)
-        
+
         self.temp_rubber_band = QgsRubberBand(canvas, QgsWkbTypes.LineGeometry)
         self.temp_rubber_band.setColor(QColor(255, 0, 0, 100))
         self.temp_rubber_band.setWidth(2)
-        
-        # Configurar el marcador de vértice
+
+        # Marcador de vértice
         self.vertex_marker = QgsVertexMarker(canvas)
         self.vertex_marker.setColor(QColor(255, 0, 0))
         self.vertex_marker.setPenWidth(2)
         self.vertex_marker.setIconSize(5)
         self.vertex_marker.setIconType(QgsVertexMarker.ICON_CIRCLE)
         self.vertex_marker.hide()
-        
-        # Configurar objeto para calcular distancias
+
+        # Cálculo de distancias (elipsoidal)
         self.distance_area = QgsDistanceArea()
         self.distance_area.setSourceCrs(self.layer_crs, QgsProject.instance().transformContext())
         self.distance_area.setEllipsoid(QgsProject.instance().ellipsoid())
-        
-        # Lista para almacenar puntos capturados
+
         self.points = []
-        # Longitud actual para mostrar
+        self.chain = []          # vértices de la cadena continua actual
         self.current_length = 0.0
-        
+
+    # ── Conversión de coordenadas ─────────────────────────────────────────
+    def activate(self):
+        super().activate()
+        # Limpiar cualquier tooltip heredado de otra herramienta sobre el lienzo
+        self.canvas.setToolTip("")
+
+    def deactivate(self):
+        self.canvas.setToolTip("")
+        self.rubber_band.reset(QgsWkbTypes.LineGeometry)
+        self.temp_rubber_band.reset(QgsWkbTypes.LineGeometry)
+        self.vertex_marker.hide()
+        self.snap_indicator.setVisible(False)
+        if self.floating_input:
+            self.floating_input.hide()
+            self.floating_input.deleteLater()
+            self.floating_input = None
+        super().deactivate()
+
     def toLayerCoordinates(self, point):
-        """Convierte las coordenadas del mapa al SRC de la capa"""
+        """Mapa -> CRS de la capa."""
         if self.need_transform:
             try:
                 return self.transform.transform(point)
-            except Exception as e:
-                # Si hay error de transformación, usar coordenadas originales
+            except Exception:
                 return point
-        else:
-            return point
-        
+        return point
+
+    def layerToMap(self, layer_point):
+        """CRS de la capa -> mapa (para mostrar en el lienzo)."""
+        if self.need_transform:
+            try:
+                return self.transform_to_map.transform(layer_point)
+            except Exception:
+                return layer_point
+        return layer_point
+
+    # ── Geometría: un único cálculo del punto final ───────────────────────
+    def _shift_held(self):
+        """True si Shift está pulsado AHORA (estado global, no depende del foco)."""
+        from qgis.PyQt.QtWidgets import QApplication
+        return bool(QApplication.keyboardModifiers() & Qt.KeyboardModifier.ShiftModifier)
+
+    def _azimuth(self, start, target):
+        """Azimut (rad, horario desde el norte) de start->target, con bloqueo opcional."""
+        dx = target.x() - start.x()
+        dy = target.y() - start.y()
+        if dx == 0 and dy == 0:
+            return 0.0
+        az = math.atan2(dx, dy)
+        if self.constrain_angle:
+            az = round(az / self.ANGLE_STEP) * self.ANGLE_STEP
+        return az
+
+    def endpoint_for(self, start, target, length):
+        """Punto final (coords de capa) a 'length' metros en la dirección start->target.
+
+        Usa proyección geodésica en CRS geográfico y trigonometría directa en
+        CRS proyectado; ambos con el mismo convenio de azimut, así que la previa
+        y el resultado final son idénticos.
+        """
+        az = self._azimuth(start, target)
+        if self.layer_crs.isGeographic():
+            return self.distance_area.computeSpheroidProject(start, length, az)
+        return QgsPointXY(start.x() + length * math.sin(az),
+                          start.y() + length * math.cos(az))
+
+    # ── Previa ligera ─────────────────────────────────────────────────────
+    def _update_preview(self):
+        """Redibuja la línea de longitud exacta sin refrescar las capas."""
+        if len(self.points) != 1 or self.last_map_point is None:
+            return
+        self.constrain_angle = self._shift_held()
+        start = self.points[0]
+        target = self.toLayerCoordinates(self.last_map_point)
+        az = self._azimuth(start, target)
+        end = self.endpoint_for(start, target, self.target_length)
+        self.rubber_band.reset(QgsWkbTypes.LineGeometry)
+        self.rubber_band.addPoint(self.layerToMap(start))
+        self.rubber_band.addPoint(self.layerToMap(end))
+        if self.floating_input:
+            self.floating_input.set_angle(math.degrees(az) % 360, self.constrain_angle)
+
     def reset(self):
-        """Reinicia la herramienta de dibujo conservando el último punto en modo continuo"""
-        # Guardar una referencia al último punto antes de resetear
+        """Reinicia el dibujo conservando el último punto en modo continuo."""
         last_point = self.last_end_point
-        
-        # Limpiar todo
+
         self.points = []
         self.rubber_band.reset(QgsWkbTypes.LineGeometry)
         self.temp_rubber_band.reset(QgsWkbTypes.LineGeometry)
         self.vertex_marker.hide()
         self.snap_indicator.setVisible(False)
-        
-        # Reiniciar el estado de entrada numérica para la siguiente línea
         self.is_numeric_input_started = False
-        
-        # Ocultar y eliminar el widget flotante si existe
+
         if self.floating_input:
             self.floating_input.hide()
             self.floating_input.deleteLater()
             self.floating_input = None
-        
-        # Si estamos en modo continuo y tenemos un punto final válido,
-        # establecerlo como primer punto para la siguiente línea
+
         if self.continuous_mode and last_point:
-            # Añadir el último punto como primer punto de la nueva línea
+            # Encadenar: el final anterior es el inicio del siguiente tramo
             self.points.append(last_point)
-            
-            # Mostrar marcador en ese punto
-            map_point = self.toMapCoordinates(last_point) if self.need_transform else last_point
+            map_point = self.layerToMap(last_point)
             self.vertex_marker.setCenter(map_point)
             self.vertex_marker.show()
-            
-            # Configurar el rubber band para mostrar el punto
             self.rubber_band.reset(QgsWkbTypes.LineGeometry)
             self.rubber_band.addPoint(map_point)
-            
-            # Crear widget flotante para la longitud
+
             self.floating_input = FloatingLengthInput(self.canvas, self.target_length)
             self.floating_input.valueChanged.connect(self.update_length)
-            
-            # Convertir coordenadas de mapa a coordenadas de pantalla de manera correcta
             pixel_point = self.canvas.mapSettings().mapToPixel().transform(map_point)
-            screen_point = QPoint(int(pixel_point.x()), int(pixel_point.y()))
-            
-            # Posicionar el widget flotante
-            self.floating_input.position_at(screen_point)
+            self.floating_input.position_at(QPoint(int(pixel_point.x()), int(pixel_point.y())))
             self.floating_input.show()
-            
+
     def emit_geometry(self, geometry):
-        """Emite la señal con la geometría capturada y guarda el último punto"""
-        # Calculamos la longitud real de la geometría
+        """Emite la línea capturada y guarda su punto final (coords de capa)."""
         real_length = self.distance_area.measureLength(geometry)
-        
-        # Guardar el último punto (punto final de la línea)
-        # Asumimos que la geometría es una línea con dos puntos
         if geometry.type() == QgsWkbTypes.LineGeometry:
             line = geometry.asPolyline()
             if len(line) >= 2:
-                self.last_end_point = line[-1]  # Guardar el último punto en coordenadas de la capa
-        
-        # Emitir la señal
+                self.last_end_point = line[-1]
+                self.chain.append(line[-1])
         self.lineCaptured.emit(geometry, real_length)
 
+    def undo_segment(self):
+        """Retrocede la cadena un vértice tras deshacer el último tramo en la capa.
+
+        Devuelve True si había un tramo confirmado. Si quedan vértices, el dibujo
+        continúa desde el vértice anterior (la red sigue conectada); si no, empieza
+        de cero.
+        """
+        if len(self.chain) >= 2:
+            self.chain.pop()
+            self.last_end_point = self.chain[-1]
+            self.continuous_mode = True
+            self.reset()
+            return True
+        self.chain = []
+        self.last_end_point = None
+        self.continuous_mode = True
+        self.reset()
+        return False
+
+    # ── Eventos del lienzo ────────────────────────────────────────────────
     def canvasPressEvent(self, event):
-        """Maneja los eventos de clic en el canvas"""
-        # Guardar la posición del evento para referencia
         self.last_mouse_pos = event
-        
-        # Intentar hacer snap al punto
+        self.constrain_angle = self._shift_held()
+
+        # Clic derecho: terminar la cadena continua
+        if event.button() == Qt.MouseButton.RightButton:
+            self.continuous_mode = False
+            self.last_end_point = None
+            self.chain = []
+            self.reset()
+            self.continuous_mode = True
+            return
+
+        if event.button() != Qt.MouseButton.LeftButton:
+            return
+
         snapping_result = self.snapping_utils.snapToMap(event.pos())
-        
-        # Obtener el punto (con o sin snap)
         if snapping_result.isValid():
             map_point = snapping_result.point()
         else:
             map_point = self.toMapCoordinates(event.pos())
-            
         layer_point = self.toLayerCoordinates(map_point)
-        
-        if event.button() == Qt.LeftButton:
-            # Ocultar indicador de snap
-            self.snap_indicator.setVisible(False)
-            
-            # Si existe un widget flotante, tomar su valor y luego cerrarlo
-            if self.floating_input and len(self.points) == 1:
-                try:
-                    self.target_length = float(self.floating_input.edit.text())
-                except ValueError:
-                    pass
-                self.floating_input.hide()
+
+        self.snap_indicator.setVisible(False)
+
+        if self.floating_input and len(self.points) == 1:
+            try:
+                self.target_length = float(self.floating_input.edit.text())
+            except ValueError:
+                pass
+            self.floating_input.hide()
+            self.floating_input.deleteLater()
+            self.floating_input = None
+
+        self.points.append(layer_point)
+        self.vertex_marker.setCenter(map_point)
+        self.vertex_marker.show()
+
+        if len(self.points) == 1:
+            if self.last_end_point is None:
+                self.chain = [self.points[0]]
+            self.rubber_band.reset(QgsWkbTypes.LineGeometry)
+            self.rubber_band.addPoint(map_point)
+            self.is_numeric_input_started = False
+            if self.floating_input:
                 self.floating_input.deleteLater()
-                self.floating_input = None
-            
-            # Añadir el punto actual a la lista (en coordenadas de la capa)
-            self.points.append(layer_point)
-            
-            # Mostrar marcador en el punto (en coordenadas del mapa)
-            self.vertex_marker.setCenter(map_point)
-            self.vertex_marker.show()
-            
-            # Si tenemos un solo punto, solo lo mostramos
-            if len(self.points) == 1:
-                self.rubber_band.reset(QgsWkbTypes.LineGeometry)
-                self.rubber_band.addPoint(map_point)
-                
-                # Resetear el estado de entrada numérica para el nuevo punto
-                self.is_numeric_input_started = False
-                
-                # Crear widget flotante para mostrar/modificar la longitud
-                if self.floating_input:
-                    self.floating_input.deleteLater()
-                    
-                self.floating_input = FloatingLengthInput(self.canvas, self.target_length)
-                self.floating_input.valueChanged.connect(self.update_length)
-                self.floating_input.position_at(event.pos())
-                self.floating_input.show()
-            
-            # Si tenemos al menos dos puntos, dibujamos la línea
-            elif len(self.points) >= 2:
-                start_point = self.points[-2]  # Punto de inicio (en coords de la capa)
-                direction_point = self.points[-1]  # Punto de dirección (en coords de la capa)
-                
-                # Calculamos la dirección normalizada
-                dx = direction_point.x() - start_point.x()
-                dy = direction_point.y() - start_point.y()
-                current_length = math.sqrt(dx*dx + dy*dy)
-                
-                if current_length > 0:  # Evitar división por cero
-                    # Normalizamos el vector dirección
-                    dx /= current_length
-                    dy /= current_length
-                    
-                    # Si estamos usando un CRS geográfico, ajustamos para distancias
-                    if self.layer_crs.isGeographic():
-                        # Para CRS geográfico, usamos el objeto QgsDistanceArea
-                        # Creamos una línea temporal con la longitud estimada
-                        temp_end_x = start_point.x() + dx * 0.001 * self.target_length  # Estimación inicial
-                        temp_end_y = start_point.y() + dy * 0.001 * self.target_length
-                        temp_end = QgsPointXY(temp_end_x, temp_end_y)
-                        
-                        # Calculamos la distancia real
-                        line_geom = QgsGeometry.fromPolylineXY([start_point, temp_end])
-                        actual_length = self.distance_area.measureLength(line_geom)
-                        
-                        # Ajustamos el factor de escala
-                        scale_factor = self.target_length / actual_length if actual_length > 0 else 1
-                        
-                        # Calculamos el punto final correcto
-                        end_x = start_point.x() + dx * 0.001 * self.target_length * scale_factor
-                        end_y = start_point.y() + dy * 0.001 * self.target_length * scale_factor
-                    else:
-                        # Para CRS proyectado, podemos usar directamente los metros
-                        end_x = start_point.x() + dx * self.target_length
-                        end_y = start_point.y() + dy * self.target_length
-                    
-                    end_point = QgsPointXY(end_x, end_y)
-                    
-                    # Creamos la geometría de la línea
-                    line_points = [start_point, end_point]
-                    geometry = QgsGeometry.fromPolylineXY(line_points)
-                    
-                    # Emitimos la señal con la geometría creada
-                    self.emit_geometry(geometry)
-                    
-                    # Reiniciamos para la siguiente línea
-                    self.reset()
-        
+            self.floating_input = FloatingLengthInput(self.canvas, self.target_length)
+            self.floating_input.valueChanged.connect(self.update_length)
+            self.floating_input.position_at(event.pos())
+            self.floating_input.show()
+
+        elif len(self.points) >= 2:
+            start = self.points[-2]
+            target = self.points[-1]
+            geometry = QgsGeometry.fromPolylineXY(
+                [start, self.endpoint_for(start, target, self.target_length)])
+            self.emit_geometry(geometry)
+            self.reset()
+
     def canvasMoveEvent(self, event):
-        """Maneja el movimiento del ratón para mostrar una vista previa de la línea"""
-        # Guardar la posición actual del ratón
         self.last_mouse_pos = event
-        
-        # Intentar hacer snap al punto y mostrar indicador
+        self.constrain_angle = self._shift_held()
+
         snapping_result = self.snapping_utils.snapToMap(event.pos())
         if snapping_result.isValid():
             self.snap_indicator.setVisible(True)
@@ -356,217 +404,126 @@ class LineDrawingTool(QgsMapToolEmitPoint):
         else:
             self.snap_indicator.setVisible(False)
             map_point = self.toMapCoordinates(event.pos())
-            
-        layer_point = self.toLayerCoordinates(map_point)
-        
+        self.last_map_point = map_point
+
         if len(self.points) > 0:
-            # Mostrar una línea temporal desde el último punto fijo hasta la posición actual del ratón
+            # Rastro temporal hasta el ratón
             self.temp_rubber_band.reset(QgsWkbTypes.LineGeometry)
-            last_map_point = self.toMapCoordinates(self.points[-1]) if self.need_transform else self.points[-1]
-            self.temp_rubber_band.addPoint(last_map_point)
+            self.temp_rubber_band.addPoint(self.layerToMap(self.points[-1]))
             self.temp_rubber_band.addPoint(map_point)
-            
-            # Si tenemos un punto, calculamos y mostramos una vista previa de la línea con longitud específica
+
             if len(self.points) == 1:
-                start_point = self.points[0]  # En coordenadas de la capa
-                
-                # Calculamos dirección y distancia actual
-                dx = layer_point.x() - start_point.x()
-                dy = layer_point.y() - start_point.y()
-                current_length = math.sqrt(dx*dx + dy*dy)
-                
-                # Si la capa está en un CRS geográfico, calculamos la distancia correctamente
-                if self.layer_crs.isGeographic():
-                    # Usamos QgsDistanceArea para medir distancias geográficas
-                    line_geom = QgsGeometry.fromPolylineXY([start_point, layer_point])
-                    current_length = self.distance_area.measureLength(line_geom)
-                
-                # Actualizar el valor en el widget flotante
-                if self.floating_input and len(self.points) == 1:
+                start = self.points[0]
+                target = self.toLayerCoordinates(map_point)
+                current_length = self.distance_area.measureLength(
+                    QgsGeometry.fromPolylineXY([start, target]))
+                if self.floating_input:
                     self.floating_input.position_at(event.pos())
                     self.floating_input.update_value(current_length)
-                
-                if current_length > 0:  # Evitar división por cero
-                    # Normalizamos vector dirección
-                    dx /= current_length
-                    dy /= current_length
-                    
-                    # Si estamos usando un CRS geográfico, ajustamos para distancias
-                    if self.layer_crs.isGeographic():
-                        # Estimación para CRS geográfico
-                        end_x = start_point.x() + dx * 0.001 * self.target_length
-                        end_y = start_point.y() + dy * 0.001 * self.target_length
-                    else:
-                        # Para CRS proyectado
-                        end_x = start_point.x() + dx * self.target_length
-                        end_y = start_point.y() + dy * self.target_length
-                    
-                    end_point = QgsPointXY(end_x, end_y)
-                    
-                    # Mostrar línea con longitud exacta (convertir a coordenadas del mapa para visualización)
-                    self.rubber_band.reset(QgsWkbTypes.LineGeometry)
-                    
-                    # Convertir puntos al CRS del proyecto para visualización si es necesario
-                    map_start = self.toMapCoordinates(start_point) if self.need_transform else start_point
-                    map_end = self.toMapCoordinates(end_point) if self.need_transform else end_point
-                    
-                    self.rubber_band.addPoint(map_start)
-                    self.rubber_band.addPoint(map_end)
-    
+                self._update_preview()
+
     def update_length(self, value):
-        """Actualiza el valor de la longitud objetivo"""
+        """Nuevo valor de longitud objetivo -> refresca solo la previa."""
         self.target_length = value
-        # Forzar actualización de la vista previa
-        self.canvas.refreshAllLayers()
-        
+        self._update_preview()
+
     def keyPressEvent(self, event):
-        """Maneja eventos de teclado para permitir entrada directa de números"""
-        # Primero, comprobamos si estamos en modo de dibujo (primer punto colocado)
+        # Deshacer último tramo (Supr/Delete): lo gestiona el panel sobre la capa.
+        # Se usa Supr en vez de Ctrl+Z porque QGIS captura Ctrl+Z globalmente (la
+        # acción Deshacer siempre está activa) y el evento no llega a la herramienta,
+        # con lo que el inicio de la cadena quedaba desincronizado.
+        if event.key() == Qt.Key.Key_Delete:
+            self.undoLastRequested.emit()
+            event.accept()
+            return
+
+        # Shift: activar el bloqueo de ángulo al instante (sin esperar a mover el ratón)
+        if event.key() == Qt.Key.Key_Shift:
+            self.constrain_angle = True
+            self._update_preview()
+            event.ignore()
+            return
+
         if len(self.points) == 1:
-            # Tecla Escape para cancelar la línea actual o desactivar el modo continuo
-            if event.key() == Qt.Key_Escape:
-                if len(self.points) > 0:
-                    # Si hay puntos, limpiar todo y desactivar modo continuo temporalmente
-                    self.continuous_mode = False
-                    self.last_end_point = None
-                    self.reset()
-                    # Reactivar el modo continuo para la próxima línea
-                    self.continuous_mode = True
-                else:
-                    # Si no hay puntos activos, simplemente resetear
-                    self.reset()
+            # Escape: cancelar la línea actual
+            if event.key() == Qt.Key.Key_Escape:
+                self.continuous_mode = False
+                self.last_end_point = None
+                self.chain = []
+                self.reset()
+                self.continuous_mode = True
                 event.accept()
                 return
-                
-            # Tecla Enter/Return para confirmar
-            elif event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
-                # Obtener la longitud desde el widget flotante
+
+            # Enter: confirmar con la longitud actual en dirección al ratón
+            elif event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
                 if self.floating_input:
                     try:
                         self.target_length = float(self.floating_input.edit.text())
                     except ValueError:
                         pass
-                    
-                # Obtener la posición actual del cursor del mouse
-                cursor_pos = self.canvas.mouseLastXY()
-                
-                # Si tenemos una longitud válida, crear la línea en dirección al cursor
                 if self.target_length > 0:
-                    # Convertir posición del cursor a coordenadas del mapa
-                    mouse_point = self.canvas.getCoordinateTransform().toMapCoordinates(cursor_pos.x(), cursor_pos.y())
-                    
-                    # Intentar snap si está habilitado
-                    snapping_result = self.snapping_utils.snapToMap(QPoint(cursor_pos.x(), cursor_pos.y()))
+                    cursor_pos = self.canvas.mouseLastXY()
+                    mouse_point = self.canvas.getCoordinateTransform().toMapCoordinates(
+                        cursor_pos.x(), cursor_pos.y())
+                    snapping_result = self.snapping_utils.snapToMap(
+                        QPoint(cursor_pos.x(), cursor_pos.y()))
                     if snapping_result.isValid():
                         mouse_point = snapping_result.point()
-                    
-                    # Convertir a coordenadas de la capa
-                    layer_mouse_point = self.toLayerCoordinates(mouse_point)
-                    start_point = self.points[0]  # Punto inicial
-                    
-                    # Calcular la dirección
-                    dx = layer_mouse_point.x() - start_point.x()
-                    dy = layer_mouse_point.y() - start_point.y()
-                    current_length = math.sqrt(dx*dx + dy*dy)
-                    
-                    if current_length > 0:  # Evitar división por cero
-                        # Normalizar vector dirección
-                        dx /= current_length
-                        dy /= current_length
-                        
-                        # Calcular punto final según la longitud especificada
-                        if self.layer_crs.isGeographic():
-                            # Para CRS geográfico
-                            temp_end_x = start_point.x() + dx * 0.001 * self.target_length
-                            temp_end_y = start_point.y() + dy * 0.001 * self.target_length
-                            temp_end = QgsPointXY(temp_end_x, temp_end_y)
-                            
-                            # Ajustar para longitud exacta
-                            line_geom = QgsGeometry.fromPolylineXY([start_point, temp_end])
-                            actual_length = self.distance_area.measureLength(line_geom)
-                            scale_factor = self.target_length / actual_length if actual_length > 0 else 1
-                            
-                            end_x = start_point.x() + dx * 0.001 * self.target_length * scale_factor
-                            end_y = start_point.y() + dy * 0.001 * self.target_length * scale_factor
-                        else:
-                            # Para CRS proyectado
-                            end_x = start_point.x() + dx * self.target_length
-                            end_y = start_point.y() + dy * self.target_length
-                            
-                        end_point = QgsPointXY(end_x, end_y)
-                        
-                        # Crear geometría y emitir señal
-                        line_points = [start_point, end_point]
-                        geometry = QgsGeometry.fromPolylineXY(line_points)
-                        self.emit_geometry(geometry)
-                        
-                        # Reiniciar para la siguiente línea
-                        self.reset()
-                
+                    self.constrain_angle = self._shift_held()
+                    target = self.toLayerCoordinates(mouse_point)
+                    start = self.points[0]
+                    geometry = QgsGeometry.fromPolylineXY(
+                        [start, self.endpoint_for(start, target, self.target_length)])
+                    self.emit_geometry(geometry)
+                    self.reset()
                 event.accept()
                 return
-                
-            # Dígitos (0-9) y punto decimal
-            elif (event.key() >= Qt.Key_0 and event.key() <= Qt.Key_9) or event.key() == Qt.Key_Period:
-                # Asegurarse de que tenemos un widget flotante
+
+            # Dígitos y punto decimal: entrada numérica directa
+            elif (Qt.Key.Key_0 <= event.key() <= Qt.Key.Key_9) or event.key() == Qt.Key.Key_Period:
                 if self.floating_input:
-                    # Obtener el carácter tecleado
-                    key_text = event.text()
-                    
-                    # Si es el primer carácter numérico después de colocar un punto o
-                    # si la caja muestra un valor dinámico (no ha sido editado manualmente aún),
-                    # limpiar el contenido actual
                     if not self.is_numeric_input_started:
                         self.floating_input.edit.clear()
                         self.is_numeric_input_started = True
-                    
-                    # Añadir el dígito al texto actual
-                    current_text = self.floating_input.edit.text()
-                    new_text = current_text + key_text
-                    
-                    # Intentar convertir a número para validar
+                    new_text = self.floating_input.edit.text() + event.text()
                     try:
                         value = float(new_text)
-                        # Actualizar texto y longitud objetivo
                         self.floating_input.edit.setText(new_text)
                         self.target_length = value
-                        # Forzar actualización visual
-                        self.canvas.refresh()
+                        self._update_preview()
                     except ValueError:
-                        # No es un número válido, ignorar
                         pass
-                    
                     event.accept()
                     return
-            
-            # Tecla de retroceso
-            elif event.key() == Qt.Key_Backspace:
-                if self.floating_input and hasattr(self, 'is_numeric_input_started') and self.is_numeric_input_started:
+
+            # Retroceso
+            elif event.key() == Qt.Key.Key_Backspace:
+                if self.floating_input and self.is_numeric_input_started:
                     current_text = self.floating_input.edit.text()
                     if current_text:
-                        # Eliminar el último carácter
                         new_text = current_text[:-1]
                         if new_text:
-                            # Si queda texto, actualizar valor
                             try:
                                 value = float(new_text)
                                 self.floating_input.edit.setText(new_text)
                                 self.target_length = value
                             except ValueError:
-                                # No es número válido, dejar como está
                                 pass
                         else:
-                            # Si se borró todo, poner 0
                             self.floating_input.edit.setText("0")
                             self.target_length = 0.0
-                        
-                        # Actualizar visualización
-                        self.canvas.refresh()
-                    
+                        self._update_preview()
                     event.accept()
                     return
-        
-        # Para cualquier otro evento, dejar que el sistema lo maneje
+
+        event.ignore()
+
+    def keyReleaseEvent(self, event):
+        # Al soltar Shift se desactiva el bloqueo de ángulo
+        if event.key() == Qt.Key.Key_Shift:
+            self.constrain_angle = False
+            self._update_preview()
         event.ignore()
 
 class LineSelectionTool(QgsMapToolEmitPoint):
@@ -577,7 +534,7 @@ class LineSelectionTool(QgsMapToolEmitPoint):
         super().__init__(canvas)
         self.canvas = canvas
         self.layer = layer
-        self.cursor = QCursor(Qt.CrossCursor)
+        self.cursor = QCursor(Qt.CursorShape.CrossCursor)
         
         # Configurar snapping
         self.snapping_utils = QgsMapCanvasSnappingUtils(canvas)
@@ -635,7 +592,7 @@ class LineSelectionTool(QgsMapToolEmitPoint):
     
     def canvasPressEvent(self, event):
         """Maneja el clic en el canvas"""
-        if event.button() == Qt.LeftButton:
+        if event.button() == Qt.MouseButton.LeftButton:
             # Intentar hacer snap a una línea
             snapping_result = self.snapping_utils.snapToMap(event.pos())
             
@@ -779,7 +736,7 @@ class PanelRedRiego(QDockWidget):
         row += 1
         self.tipo_combo = QComboBox()
         self.tipo_combo.addItems(["Matriz", "Terciarias", "Laterales"])
-        self.tipo_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.tipo_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         layout.addWidget(self.tipo_combo, row, 0)
         row += 1
         
@@ -788,7 +745,7 @@ class PanelRedRiego(QDockWidget):
         self.diam_combo = QComboBox()
         self.diam_combo.addItems(["16", "17", "20", "25", "32", "40", "50", "63", "75", "90", "110", "125", "140", "160", "200", "250", "280", "315"])
         self.diam_combo.setCurrentText("50")  # Valor por defecto
-        self.diam_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.diam_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         layout.addWidget(self.diam_combo, row, 0)
         row += 1
 
@@ -797,7 +754,7 @@ class PanelRedRiego(QDockWidget):
         row += 1
         self.material_combo = QComboBox()
         self.material_combo.addItems(["PE", "PVC", "HDPE"])
-        self.material_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.material_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         layout.addWidget(self.material_combo, row, 0)
         row += 1
 
@@ -806,7 +763,7 @@ class PanelRedRiego(QDockWidget):
         row += 1
         self.sector_input = QLineEdit("1")
         self.sector_input.setValidator(QIntValidator(1, 20))
-        self.sector_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.sector_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         layout.addWidget(self.sector_input, row, 0)
         row += 1
 
@@ -815,7 +772,7 @@ class PanelRedRiego(QDockWidget):
         row += 1
         self.tipo_riego_combo = QComboBox()
         self.tipo_riego_combo.addItems(["Aspersion", "Goteo", "Cintas", "Subterraneo", "Microaspersion"])
-        self.tipo_riego_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.tipo_riego_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         layout.addWidget(self.tipo_riego_combo, row, 0)
         row += 1
         
@@ -826,7 +783,7 @@ class PanelRedRiego(QDockWidget):
         
         self.asignar_btn = QPushButton("Asignar atributos")
         self.asignar_btn.clicked.connect(self.asignar_atributos)
-        self.asignar_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.asignar_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         layout.addWidget(self.asignar_btn, row, 0)
         row += 1
         
@@ -874,7 +831,7 @@ class PanelRedRiego(QDockWidget):
 
         # Añadir un espaciador para ocupar el espacio restante
         spacer = QWidget()
-        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout.addWidget(spacer, row, 0)
 
     def activar_herramienta_seleccion(self, action):
@@ -900,7 +857,7 @@ class PanelRedRiego(QDockWidget):
             self.iface.messageBar().pushMessage(
                 "Selección", 
                 f"Seleccionando objetos espaciales en la capa {active_layer.name()}", 
-                Qgis.Info, 
+                Qgis.MessageLevel.Info, 
                 3  # Duración en segundos
             )
 
@@ -926,7 +883,7 @@ class PanelRedRiego(QDockWidget):
             self.iface.messageBar().pushMessage(
                 "Selección", 
                 f"Se han seleccionado {active_layer.selectedFeatureCount()} objetos en la capa {active_layer.name()}", 
-                Qgis.Success, 
+                Qgis.MessageLevel.Success, 
                 3  # Duración en segundos
             )
             
@@ -960,7 +917,7 @@ class PanelRedRiego(QDockWidget):
             self.iface.messageBar().pushMessage(
                 "Deselección", 
                 f"Se han deseleccionado {num_selected} objetos en la capa {active_layer.name()}", 
-                Qgis.Success, 
+                Qgis.MessageLevel.Success, 
                 3  # Duración en segundos
             )
             
@@ -975,7 +932,7 @@ class PanelRedRiego(QDockWidget):
         self.iface.messageBar().pushMessage(
             "Identificación", 
             "Herramienta de identificación activada. Haga clic sobre un objeto para identificarlo.", 
-            Qgis.Info, 
+            Qgis.MessageLevel.Info, 
             3  # Duración en segundos
         )
 
@@ -1067,15 +1024,41 @@ class PanelRedRiego(QDockWidget):
             
         self.drawing_tool = LineDrawingTool(self.canvas, self.initial_length, layer.crs())
         self.drawing_tool.lineCaptured.connect(self.add_line_feature)
+        self.drawing_tool.undoLastRequested.connect(self.undo_last_line)
         self.canvas.setMapTool(self.drawing_tool)
         
         # Mostrar mensaje informativo
         self.iface.messageBar().pushInfo(
             "Red de Riego",
-            "Herramienta de dibujo activada. Haga clic para definir el punto inicial. " +
-            "La caja flotante mostrará la distancia actual y le permitirá ingresar una longitud específica."
+            "Dibujo activado. Clic = punto inicial; teclee la longitud o muévase y haga clic. "
+            "Shift = ángulo ortogonal/45°, clic derecho = terminar, Supr = deshacer tramo."
         )
     
+    def undo_last_line(self):
+        """Deshace SOLO el último tramo y continúa la cadena desde el vértice anterior.
+
+        Quita la última entidad de la pila de edición de la capa y retrocede un
+        vértice en la herramienta, de modo que el resto de la red se conserva y el
+        dibujo sigue conectado (no se anula toda la red).
+        """
+        layer = self.iface.activeLayer()
+        if not layer or not layer.isEditable() or not self.drawing_tool:
+            return
+        had_segment = len(self.drawing_tool.chain) >= 2
+        if had_segment:
+            undo_stack = layer.undoStack()
+            if undo_stack is not None and undo_stack.canUndo():
+                undo_stack.undo()
+                layer.triggerRepaint()
+        # Retroceder la cadena un vértice (o reiniciar si ya no quedan tramos)
+        self.drawing_tool.undo_segment()
+        if had_segment:
+            try:
+                self.iface.mainWindow().statusBar().showMessage(
+                    "Red de Riego — se deshizo el último tramo.", 2500)
+            except Exception:
+                pass
+
     def add_line_feature(self, geometry, length):
         """Añade una nueva característica de línea a la capa activa"""
         layer = self.iface.activeLayer()
@@ -1110,11 +1093,13 @@ class PanelRedRiego(QDockWidget):
         # Guardar la última longitud utilizada para el próximo dibujo
         self.initial_length = length
         
-        # Informar al usuario que se ha dibujado la línea
-        self.iface.messageBar().pushInfo(
-            "Red de Riego",
-            f"Línea dibujada con éxito. Longitud: {round(length, 2)}m, Diámetro: {feature['DN']}mm"
-        )
+        # Mostrar la longitud en la barra de estado (se auto-reemplaza, no satura)
+        try:
+            self.iface.mainWindow().statusBar().showMessage(
+                f"Red de Riego — tramo: {round(length, 2)} m, Ø{feature['DN']} mm", 3000
+            )
+        except Exception:
+            pass
 
     def encontrar_capa_red_riego(self):
         """Busca y devuelve la capa 'Red de riego' o None si no existe"""
@@ -1293,7 +1278,7 @@ class PanelRedRiego(QDockWidget):
         input_layout.addWidget(QLabel("Nueva longitud (m):"))
         length_input = QLineEdit()
         length_input.setText(str(round(current_length, 2)))
-        length_input.setValidator(QRegExpValidator(QRegExp("\\d+(\\.\\d+)?")))
+        length_input.setValidator(QRegularExpressionValidator(QRegularExpression("\\d+(\\.\\d+)?")))
         input_layout.addWidget(length_input)
         layout.addLayout(input_layout)
         
@@ -1310,7 +1295,7 @@ class PanelRedRiego(QDockWidget):
         dialog.setLayout(layout)
         
         # Mostrar diálogo
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             try:
                 new_length = float(length_input.text())
                 if new_length <= 0:
@@ -1684,9 +1669,9 @@ class PanelRedRiego(QDockWidget):
         
         # Agregar campos a la capa
         pr.addAttributes([
-            QgsField("Tipo", QVariant.String),
-            QgsField("DN", QVariant.Int),
-            QgsField("L", QVariant.Double)
+            QgsField("Tipo", QMetaType.Type.QString),
+            QgsField("DN", QMetaType.Type.Int),
+            QgsField("L", QMetaType.Type.Double)
         ])
         vl.updateFields()
         
